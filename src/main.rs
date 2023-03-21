@@ -62,3 +62,7 @@ fn raw_to_base64(buf: &[u8]) -> Vec<u8> {
 fn hex_to_base64(buf: &str) -> Vec<u8> {
     raw_to_base64(&hex_to_raw(buf))
 }
+
+fn xor(a: &[u8], b: &[u8]) -> Vec<u8> {
+    a.iter().zip(b.iter()).map(|(m, n)| m ^ n).collect()
+}
