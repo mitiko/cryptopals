@@ -17,67 +17,40 @@ fn challange2() {
 
 #[test]
 fn challange3() {
-    let encoded = "1b37373331363f78151b7f2b783431333d78397828372d363c78373e783a393b3736";
-    let bytes = hex_to_raw(encoded);
+    let input = "1b37373331363f78151b7f2b783431333d78397828372d363c78373e783a393b3736";
+    let encoded = hex_to_raw(input);
 
-    // create frequency table per bit position
-    // good thing I know data compression 🙄
-    let text = std::fs::read_to_string("data/book1").unwrap();
-    let mut bit_counts = vec![[0; 2]; 8];
-    let mut enc_bit_counts = vec![[0; 2]; 8];
+    let freq: Vec<f64> = {
+        let text = std::fs::read_to_string("data/book1").unwrap();
+        let mut counts = vec![1.0; 256];
+        text.bytes().for_each(|byte| counts[usize::from(byte)] += 1.0);
+        let sum: f64 = counts.iter().sum();
+        counts.iter().map(|c| c / sum).collect()
+    };
 
-    // for byte in text.bytes().filter(|&b| b.is_ascii_lowercase() || b == b' ') {
-    for byte in text.bytes() {
-        let mut bit_mask = 1;
-        for bit_id in 0..8 {
-            let bit = usize::from(byte & bit_mask > 0);
-            bit_counts[bit_id][bit] += 1;
-            bit_mask <<= 1;
+    let mut min_cross_entropy = f64::MAX;
+    let mut best_key = 0;
+    for key in 0..=255 {
+        let decoded: Vec<u8> = encoded.iter().map(|byte| byte ^ key).collect();
+        let dec_freq: Vec<f64> = {
+            let mut counts = vec![1.0; 256];
+            decoded.iter().for_each(|&byte| counts[usize::from(byte)] += 1.0);
+            let sum: f64 = counts.iter().sum();
+            counts.iter().map(|c| c / sum).collect()
+        };
+
+        let cross_entropy: f64 = freq.iter().zip(dec_freq.iter())
+            .map(|(p, q)| -p * q.log2()).sum();
+
+        if cross_entropy <= min_cross_entropy {
+            min_cross_entropy = cross_entropy;
+            best_key = key;
         }
     }
 
-    for byte in bytes.iter() {
-        let mut bit_mask = 1;
-        for bit_id in 0..8 {
-            let bit = usize::from(byte & bit_mask > 0);
-            enc_bit_counts[bit_id][bit] += 1;
-            bit_mask <<= 1;
-        }
-    }
+    let decoded: Vec<u8> = encoded.iter().map(|byte| byte ^ best_key).collect();
+    let output = String::from_utf8_lossy(&decoded);
 
-    let freq: Vec<f64> = bit_counts.iter()
-        .map(|&[c0, c1]| f64::from(c0) / f64::from(c0 + c1))
-        .collect();
-
-    let enc_freq: Vec<f64> = enc_bit_counts.iter()
-        .map(|&[c0, c1]| f64::from(c0) / f64::from(c0 + c1))
-        .collect();
-
-    println!("freq1: {freq:?}");
-    println!("freq2: {enc_freq:?}");
-    let avg = freq.iter().sum::<f64>() / 8.0;
-    println!("avg: {avg}");
-
-    let mut key: u8 = 0;
-    for (&expected, &real) in freq.iter().zip(enc_freq.iter()) {
-        let bit = u8::from((expected >= 0.5 && real < 0.5) || (expected < 0.5 && real >= 0.5));
-        key >>= 1;
-        key |= bit << 7;
-    }
-
-    println!("key: {key}");
-
-    let decoded: Vec<u8> = bytes.iter().map(|byte| byte ^ key).collect();
-    let s = String::from_utf8_lossy(&decoded);
-
-    // for i in 0..=255 {
-    //     let decoded: Vec<u8> = bytes.iter().map(|byte| byte ^ i).collect();
-    //     let s = String::from_utf8_lossy(&decoded);
-    //     println!("[{i}] {s}");
-    // }
-
-    // by bruteforce it's 88, but statistically 91 is more correct.
-    // they're almost identical except the last 2 bits are flipped.
-
-    dbg!(s);
+    assert_eq!(best_key, 88);
+    assert_eq!(output, "Cooking MC's like a pound of bacon");
 }
