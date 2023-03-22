@@ -9,5 +9,5 @@ mod tests;
 mod set1;
 
 fn main() {
-    println!("Run tests with `cargo test`");
+    println!("Run tests with `cargo test -- --nocapture`");
 }
