@@ -1,4 +1,4 @@
-use super::*;
+use super::utils::*;
 
 #[test]
 fn challange1() {

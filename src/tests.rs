@@ -1,4 +1,4 @@
-use super::*;
+use super::utils::*;
 
 #[test]
 fn convert_hex_to_raw() {
