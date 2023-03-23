@@ -105,3 +105,39 @@ fn challange5() {
 
     assert_eq!(xor_rep(input.as_bytes(), key), hex_to_raw(output));
 }
+
+#[test]
+fn challange6() {
+    let input = std::fs::read_to_string("data/set1/challange6.txt").unwrap();
+    let bytes = base64_to_raw(&input);
+
+    let mut key_size = 0;
+    let mut min_hamming_distance = f64::MAX;
+    for l in 2..=40 {
+        // test 4 blocks of key_size
+        let hd = hamming_distance(&bytes[..4*l], &bytes[4*l..8*l]);
+        let normalized_hd = f64::from(hd) / f64::from(u8::try_from(l).unwrap());
+        if normalized_hd < min_hamming_distance {
+            min_hamming_distance = normalized_hd;
+            key_size = l;
+        }
+    }
+
+    let key: Vec<u8> = (0..key_size)
+        .map(|offset| bytes.iter()
+            .skip(offset)
+            .step_by(key_size)
+            .map(|&x| x)
+            .collect::<Vec<u8>>()) // group by xor-ed with same byte of key
+        .map(|group| xor_cross_entropy_analysis(&group).0)
+        .collect();
+
+    let raw = xor_rep(&bytes, &key);
+    std::fs::write("data/decoded/set1-challange6.txt", raw).unwrap();
+    assert_eq!(key, [
+        0x54, 0x65, 0x72, 0x6d, 0x69, 0x6e, 0x61, 0x74,
+        0x6f, 0x72, 0x20, 0x58, 0x3a, 0x20, 0x42, 0x72,
+        0x69, 0x6e, 0x67, 0x20, 0x74, 0x68, 0x65, 0x20,
+        0x6e, 0x6f, 0x69, 0x73, 0x65
+    ]);
+}
