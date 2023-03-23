@@ -36,3 +36,10 @@ fn convert_base64_to_raw_to_base64() {
     let raw = base64_to_raw(input);
     assert_eq!(std::str::from_utf8(&raw_to_base64(&raw)).unwrap(), input);
 }
+
+#[test]
+fn hamming_distance_test() {
+    let start = "this is a test".as_bytes();
+    let end = "wokka wokka!!!".as_bytes();
+    assert_eq!(hamming_distance(start, end), 37);
+}
