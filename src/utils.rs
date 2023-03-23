@@ -46,6 +46,34 @@ pub fn raw_to_base64(buf: &[u8]) -> Vec<u8> {
     output
 }
 
+pub fn base64_to_raw(input: &str) -> Vec<u8> {
+    let mut output = Vec::with_capacity(3 * input.len() / 4);
+    let mut chars = input.bytes()
+        .filter(|&byte|
+            byte.is_ascii_alphanumeric() ||
+            byte == b'=' || byte == b'+' || byte == b'/')
+        .map(|byte| match byte {
+            b'+' => 62,
+            b'/' => 63,
+            b'=' => 64,
+            b'A'..=b'Z' => byte - b'A',
+            b'a'..=b'z' => byte - b'a' + 26,
+            b'0'..=b'9' => byte - b'0' + 52,
+            _ => 64
+        });
+
+    loop {
+        let (Some(a), Some(b), Some(c), Some(d)) = (chars.next(), chars.next(), chars.next(), chars.next()) else { break };
+        let mut buf = (u32::from(a) << 6) | u32::from(b);
+        if c == 64 { output.push(u8::try_from(buf >> 4).unwrap()); break; }
+        buf = (buf << 6) | u32::from(c);
+        if d == 64 { output.extend(u16::try_from(buf >> 2).unwrap().to_be_bytes()); break; }
+        buf = (buf << 6) | u32::from(d);
+        output.extend(&buf.to_be_bytes()[1..]);
+    }
+    output
+}
+
 pub fn hex_to_base64(buf: &str) -> Vec<u8> {
     raw_to_base64(&hex_to_raw(buf))
 }
