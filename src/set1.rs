@@ -132,6 +132,7 @@ fn challange6() {
         .map(|group| xor_cross_entropy_analysis(&group).0)
         .collect();
 
+    // encryption is symmetric
     let raw = xor_rep(&bytes, &key);
     std::fs::write("data/decoded/set1-challange6.txt", raw).unwrap();
     assert_eq!(key, [
