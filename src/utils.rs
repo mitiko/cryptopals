@@ -89,3 +89,12 @@ pub fn xor_rep(data: &[u8], key: &[u8]) -> Vec<u8> {
 pub fn hamming_distance(a: &[u8], b: &[u8]) -> u32 {
     xor(a, b).iter().map(|x| x.count_ones()).sum()
 }
+
+use openssl::symm::{Cipher, encrypt, decrypt};
+pub fn aes128_ecb_encrypt(key: &[u8], data: &[u8]) -> Vec<u8> {
+    encrypt(Cipher::aes_128_ecb(), key, None, data).unwrap()
+}
+
+pub fn aes128_ecb_decrypt(key: &[u8], data: &[u8]) -> Vec<u8> {
+    decrypt(Cipher::aes_128_ecb(), key, None, data).unwrap()
+}

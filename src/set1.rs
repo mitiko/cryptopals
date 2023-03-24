@@ -142,3 +142,13 @@ fn challange6() {
         0x6e, 0x6f, 0x69, 0x73, 0x65
     ]);
 }
+
+#[test]
+fn challange7() {
+    let input = std::fs::read_to_string("data/set1/challange7.txt").unwrap();
+    let data = base64_to_raw(&input);
+    let key = b"YELLOW SUBMARINE";
+    let raw = aes128_ecb_decrypt(key, &data);
+    std::fs::write("data/decoded/set1-challange7.txt", raw).unwrap();
+}
+
