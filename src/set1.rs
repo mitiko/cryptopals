@@ -1,4 +1,4 @@
-use std::{fs::File, io::{self, BufRead}};
+use std::{fs::File, io::{self, BufRead}, collections::HashSet};
 
 use super::utils::*;
 use lazy_static::lazy_static;
@@ -150,5 +150,31 @@ fn challange7() {
     let key = b"YELLOW SUBMARINE";
     let raw = aes128_ecb_decrypt(key, &data);
     std::fs::write("data/decoded/set1-challange7.txt", raw).unwrap();
+}
+
+#[test]
+fn challange8() {
+    let file = File::open("data/set1/challange8.txt").unwrap();
+    let input: Vec<_> = io::BufReader::new(file)
+        .lines()
+        .map(|line| line.unwrap())
+        .map(|encoded| hex_to_raw(&encoded))
+        .collect();
+
+    // find which one has the most repetitions
+    // luckily 16 bytes fit into u128 :))
+    let (line, _) = input.iter().enumerate()
+    .min_by_key(|(_, encoded)| {
+        assert_eq!(encoded.len(), 160);
+        let mut set = HashSet::new();
+        for i in (0..encoded.len()).step_by(16) {
+            let block = &encoded[i..i+16];
+            let block_data = u128::from_be_bytes(block.try_into().unwrap());
+            set.insert(block_data);
+        }
+        set.len()
+    }).unwrap();
+
+    assert_eq!(line, 132);
 }
 
