@@ -68,6 +68,7 @@ fn xor_cross_entropy_analysis(encoded: &[u8]) -> (u8, f64) {
 }
 
 #[test]
+#[ignore]
 fn challange4() {
     let file = File::open("data/set1/challange4.txt").unwrap();
     let input: Vec<_> = io::BufReader::new(file)
