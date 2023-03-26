@@ -3,6 +3,7 @@
 pub mod utils;
 pub mod xor;
 pub mod ecb;
+pub mod cbc;
 
 #[cfg(test)]
 mod tests;

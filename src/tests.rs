@@ -1,5 +1,5 @@
 use crate::utils::conversions::*;
-use crate::{xor::*, ecb::*};
+use crate::{xor::*, ecb::*, cbc::*};
 
 #[test]
 fn convert_hex_to_raw() {
@@ -75,9 +75,10 @@ fn xor_rep_long_key() {
 
 #[test]
 fn aes128_ecb_encrypt_decrypt() {
-    let data = b"Lorem ipsum dolor sit amet, consectetur adipiscing elit.";
+    let data = pkcs7_pad(b"Lorem ipsum dolor sit amet, consectetur adipiscing elit.", 64);
     let key = b"YELLOW SUBMARINE";
-    assert_eq!(aes128_ecb_decrypt(key, &aes128_ecb_encrypt(key, data)), data);
+    let ciphertext = aes128_ecb_encrypt(key, &data);
+    assert_eq!(aes128_ecb_decrypt(key, &ciphertext), data);
 }
 
 #[test]
@@ -86,4 +87,24 @@ fn pkcs7() {
     let output = b"YELLOW SUBMARINE\x05\x05\x05\x05\x05";
     assert_eq!(pkcs7_pad(input, 16), input);
     assert_eq!(pkcs7_pad(input, 21), output);
+}
+
+#[test]
+fn aes128_cbc_encrypt_matches_openssl() {
+    let data = pkcs7_pad(b"Lorem ipsum dolor sit amet, consectetur adipiscing elit.", 64);
+    let key = b"YELLOW SUBMARINE";
+    let iv = b"\x00\x00\x00";
+    let openssl_iv = &iv.repeat(16)[..16];
+    let cipher = openssl::symm::Cipher::aes_128_cbc();
+    let output = openssl::symm::encrypt(cipher, key, Some(openssl_iv), &data).unwrap();
+    assert_eq!(aes128_cbc_encrypt(key, iv, &data), &output[..64]); // openssl autopads
+}
+
+#[test]
+fn aes128_cbc_encrypt_decrypt() {
+    let data = pkcs7_pad(b"Lorem ipsum dolor sit amet, consectetur adipiscing elit.", 64);
+    let key = b"YELLOW SUBMARINE";
+    let iv = b"\x00\x00\x00";
+    let ciphertext = aes128_cbc_encrypt(key, iv, &data);
+    assert_eq!(aes128_cbc_decrypt(key, iv, &ciphertext), data);
 }
