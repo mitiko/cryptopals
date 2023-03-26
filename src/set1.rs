@@ -1,6 +1,7 @@
 use std::collections::HashSet;
 
-use super::utils::*;
+use crate::utils::{conversions::*, io::*};
+use crate::{xor::*, ecb::*};
 use lazy_static::lazy_static;
 
 #[test]

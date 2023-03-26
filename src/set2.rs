@@ -1,4 +1,4 @@
-use super::utils::*;
+use crate::ecb::*;
 
 #[test]
 fn challange9() {

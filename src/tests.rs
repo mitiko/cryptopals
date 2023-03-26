@@ -1,4 +1,5 @@
-use super::utils::*;
+use crate::utils::conversions::*;
+use crate::{xor::*, ecb::*};
 
 #[test]
 fn convert_hex_to_raw() {
@@ -77,4 +78,12 @@ fn aes128_ecb_encrypt_decrypt() {
     let data = b"Lorem ipsum dolor sit amet, consectetur adipiscing elit.";
     let key = b"YELLOW SUBMARINE";
     assert_eq!(aes128_ecb_decrypt(key, &aes128_ecb_encrypt(key, data)), data);
+}
+
+#[test]
+fn pkcs7() {
+    let input = b"YELLOW SUBMARINE";
+    let output = b"YELLOW SUBMARINE\x05\x05\x05\x05\x05";
+    assert_eq!(pkcs7_pad(input, 16), input);
+    assert_eq!(pkcs7_pad(input, 21), output);
 }
