@@ -1,4 +1,4 @@
-use std::{fs::File, io::{self, BufRead}, collections::HashSet};
+use std::collections::HashSet;
 
 use super::utils::*;
 use lazy_static::lazy_static;
@@ -70,12 +70,7 @@ fn xor_cross_entropy_analysis(encoded: &[u8]) -> (u8, f64) {
 #[test]
 #[ignore]
 fn challange4() {
-    let file = File::open("data/set1/challange4.txt").unwrap();
-    let input: Vec<_> = io::BufReader::new(file)
-        .lines()
-        .map(|line| line.unwrap())
-        .map(|encoded| hex_to_raw(&encoded))
-        .collect();
+    let input = read_hex_lines("data/set1/challange4.txt");
 
     // min_by_key doesn't work on f64 :'(
     let mut line_id = 0;
@@ -109,8 +104,7 @@ fn challange5() {
 
 #[test]
 fn challange6() {
-    let input = std::fs::read_to_string("data/set1/challange6.txt").unwrap();
-    let bytes = base64_to_raw(&input);
+    let bytes = read_base64("data/set1/challange6.txt");
 
     let mut key_size = 0;
     let mut min_hamming_distance = f64::MAX;
@@ -146,8 +140,7 @@ fn challange6() {
 
 #[test]
 fn challange7() {
-    let input = std::fs::read_to_string("data/set1/challange7.txt").unwrap();
-    let data = base64_to_raw(&input);
+    let data = read_base64("data/set1/challange7.txt");
     let key = b"YELLOW SUBMARINE";
     let raw = aes128_ecb_decrypt(key, &data);
     std::fs::write("data/decoded/set1-challange7.txt", raw).unwrap();
@@ -155,12 +148,7 @@ fn challange7() {
 
 #[test]
 fn challange8() {
-    let file = File::open("data/set1/challange8.txt").unwrap();
-    let input: Vec<_> = io::BufReader::new(file)
-        .lines()
-        .map(|line| line.unwrap())
-        .map(|encoded| hex_to_raw(&encoded))
-        .collect();
+    let input = read_hex_lines("data/set1/challange8.txt");
 
     // find which one has the most repetitions
     // luckily 16 bytes fit into u128 :))
