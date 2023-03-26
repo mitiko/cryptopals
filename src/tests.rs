@@ -25,7 +25,7 @@ fn convert_base64_to_raw() {
 
 #[test]
 fn convert_raw_to_base64_to_raw() {
-    let input = "Lorem ipsum dolor sit amet, consectetur adipiscing elit.".as_bytes();
+    let input = b"Lorem ipsum dolor sit amet, consectetur adipiscing elit.";
     let base64 = raw_to_base64(input);
     assert_eq!(base64_to_raw(std::str::from_utf8(&base64).unwrap()), input);
 }
@@ -39,8 +39,8 @@ fn convert_base64_to_raw_to_base64() {
 
 #[test]
 fn hamming_distance_test() {
-    let start = "this is a test".as_bytes();
-    let end = "wokka wokka!!!".as_bytes();
+    let start = b"this is a test";
+    let end = b"wokka wokka!!!";
     assert_eq!(hamming_distance(start, end), 37);
 }
 
@@ -70,4 +70,11 @@ fn xor_rep_long_key() {
     let data = [0x0f, 0xf0, 0x55];
     let key  = [0xbb, 0x71, 0xa2, 0x25];
     assert_eq!(xor_rep(&data, &key), [0xb4, 0x81, 0xf7]);
+}
+
+#[test]
+fn aes128_ecb_encrypt_decrypt() {
+    let data = b"Lorem ipsum dolor sit amet, consectetur adipiscing elit.";
+    let key = b"YELLOW SUBMARINE";
+    assert_eq!(aes128_ecb_decrypt(key, &aes128_ecb_encrypt(key, data)), data);
 }
