@@ -23,9 +23,10 @@ fn challange10() {
     std::fs::write("data/decoded/set2-challange10.txt", decrypted).unwrap();
 }
 
+#[derive(PartialEq, Eq, Debug)]
 enum Mode { ECB, CBC }
-fn encryption_oracle(plaintext: &[u8]) -> Vec<u8> {
-    let mut rng = rand::rngs::StdRng::from_seed([133; 32]);
+fn encryption_oracle(plaintext: &[u8], seed: [u8; 32]) -> (Mode, Vec<u8>) {
+    let mut rng = rand::rngs::StdRng::from_seed(seed);
 
     fn gen_twig(rng: &mut StdRng) -> Vec<u8> {
         let len = rng.gen_range(5..=10);
@@ -37,18 +38,19 @@ fn encryption_oracle(plaintext: &[u8]) -> Vec<u8> {
     let key = rng.gen();
     let iv: [_; 16] = rng.gen();
     let mut prefix = gen_twig(&mut rng);
-    let postfix = gen_twig(&mut rng);
+    let suffix = gen_twig(&mut rng);
     let mode = if rng.gen() { Mode::ECB } else { Mode::CBC };
     let data = {
         prefix.extend_from_slice(plaintext);
-        prefix.extend(postfix);
+        prefix.extend(suffix);
         pkcs7_pad(&prefix)
     };
 
-    match mode {
+    let ciphertext = match mode {
         Mode::ECB => aes128_ecb_encrypt(&key, &data),
         Mode::CBC => aes128_cbc_encrypt(&key, &iv, &data)
-    }
+    };
+    (mode, ciphertext)
 }
 
 fn detection_oracle(ciphertext: &[u8]) -> Mode {
@@ -59,9 +61,18 @@ fn detection_oracle(ciphertext: &[u8]) -> Mode {
         let block_data = u128::from_be_bytes(block.try_into().unwrap());
         set.insert(block_data);
     }
-    if set.len() < ciphertext.len() / 16 { Mode::CBC } else { Mode::ECB }
+    if set.len() < ciphertext.len() / 16 { Mode::ECB } else { Mode::CBC }
 }
 
 #[test]
 fn challange11() {
+    // detect repeating data, regardless of random prefix, suffix
+    let plaintext = [0; 64];
+
+    // generate random seeds from a seeded rng
+    let mut rng = rand::rngs::StdRng::from_seed([133; 32]);
+    for _ in 0..1000 {
+        let (mode, ciphertext) = encryption_oracle(&plaintext, rng.gen());
+        assert_eq!(mode, detection_oracle(&ciphertext));
+    }
 }
