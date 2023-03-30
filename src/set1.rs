@@ -37,7 +37,9 @@ lazy_static! {
     static ref FREQ_ENG: Vec<f64> = {
         let text = std::fs::read_to_string("data/book1").unwrap();
         let mut counts = [1.0; 256];
-        text.as_bytes().iter().for_each(|&byte| counts[usize::from(byte)] += 1.0);
+        text.as_bytes()
+            .iter()
+            .for_each(|&byte| counts[usize::from(byte)] += 1.0);
         let sum: f64 = counts.iter().sum();
         counts.iter().map(|c| c / sum).collect()
     };
@@ -55,9 +57,11 @@ fn xor_cross_entropy_analysis(encoded: &[u8]) -> (u8, f64) {
             counts.iter().map(|c| c / sum).collect()
         };
 
-        let cross_entropy: f64 = FREQ_ENG.iter().zip(freq.iter())
-            .map(|(p, q)| -p * q.log2()).sum();
-            // .map(|(p, q)| -q * p.log2()).sum();
+        let cross_entropy: f64 = FREQ_ENG
+            .iter()
+            .zip(freq.iter())
+            .map(|(p, q)| -p * q.log2())
+            .sum();
 
         if cross_entropy <= min_cross_entropy {
             min_cross_entropy = cross_entropy;
@@ -120,11 +124,13 @@ fn challange6() {
     }
 
     let key: Vec<u8> = (0..key_size)
-        .map(|offset| bytes.iter()
-            .skip(offset)
-            .step_by(key_size)
-            .map(|&x| x)
-            .collect::<Vec<u8>>()) // group by xor-ed with same byte of key
+        .map(|offset| {
+            bytes.iter()
+                .skip(offset)
+                .step_by(key_size)
+                .map(|&x| x)
+                .collect::<Vec<u8>>()
+        }) // group by xor-ed with same byte of key
         .map(|group| xor_cross_entropy_analysis(&group).0)
         .collect();
 
@@ -154,17 +160,16 @@ fn challange8() {
     // find which one has the most repetitions
     // luckily 16 bytes fit into u128 :))
     let (line, _) = input.iter().enumerate()
-    .min_by_key(|(_, encoded)| {
-        assert_eq!(encoded.len(), 160);
-        let mut set = HashSet::new();
-        for i in (0..encoded.len()).step_by(16) {
-            let block = &encoded[i..i+16];
-            let block_data = u128::from_be_bytes(block.try_into().unwrap());
-            set.insert(block_data);
-        }
-        set.len()
-    }).unwrap();
+        .min_by_key(|(_, encoded)| {
+            assert_eq!(encoded.len(), 160);
+            let mut set = HashSet::new();
+            for i in (0..encoded.len()).step_by(16) {
+                let block = &encoded[i..i+16];
+                let block_data = u128::from_be_bytes(block.try_into().unwrap());
+                set.insert(block_data);
+            }
+            set.len()
+        }).unwrap();
 
     assert_eq!(line, 132);
 }
-

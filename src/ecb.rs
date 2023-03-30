@@ -34,8 +34,10 @@ fn encrypt(cipher: Cipher, key: &[u8], plaintext: &[u8]) -> Vec<u8> {
     encrypter.pad(false);
     let mut ciphertext = vec![0; plaintext.len() + cipher.block_size()];
     let count = encrypter.update(plaintext, &mut ciphertext).unwrap();
-    let rest = encrypter.finalize(&mut ciphertext[count..])
-        .map_err(|_| PlaintextNotAligned).unwrap();
+    let rest = encrypter
+        .finalize(&mut ciphertext[count..])
+        .map_err(|_| PlaintextNotAligned)
+        .unwrap();
     ciphertext.resize(count + rest, 0);
     ciphertext
 }

@@ -1,9 +1,9 @@
 #![allow(dead_code)]
 
+pub mod cbc;
+pub mod ecb;
 pub mod utils;
 pub mod xor;
-pub mod ecb;
-pub mod cbc;
 
 #[cfg(test)]
 mod tests;
