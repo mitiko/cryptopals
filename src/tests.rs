@@ -75,23 +75,32 @@ fn xor_rep_long_key() {
 
 #[test]
 fn aes128_ecb_encrypt_decrypt() {
-    let data = pkcs7_pad(b"Lorem ipsum dolor sit amet, consectetur adipiscing elit.", 64);
+    let data = pkcs7_pad(b"Lorem ipsum dolor sit amet, consectetur adipiscing elit.");
     let key = b"YELLOW SUBMARINE";
     let ciphertext = aes128_ecb_encrypt(key, &data);
     assert_eq!(aes128_ecb_decrypt(key, &ciphertext), data);
 }
 
 #[test]
-fn pkcs7() {
+fn pkcs7_exact() {
     let input = b"YELLOW SUBMARINE";
     let output = b"YELLOW SUBMARINE\x05\x05\x05\x05\x05";
-    assert_eq!(pkcs7_pad(input, 16), input);
-    assert_eq!(pkcs7_pad(input, 21), output);
+    assert_eq!(pkcs7_pad_to(16, input), input);
+    assert_eq!(pkcs7_pad_to(21, input), output);
+}
+
+#[test]
+fn pkcs7_auto() {
+    let input_aligned = b"YELLOW SUBMARINE";
+    let input_not_aligned = b"YELLOW SUBMARINE111";
+    let output_not_aligned = b"YELLOW SUBMARINE111\x0d\x0d\x0d\x0d\x0d\x0d\x0d\x0d\x0d\x0d\x0d\x0d\x0d";
+    assert_eq!(pkcs7_pad(input_aligned), input_aligned);
+    assert_eq!(pkcs7_pad(input_not_aligned), output_not_aligned);
 }
 
 #[test]
 fn aes128_cbc_encrypt_matches_openssl() {
-    let data = pkcs7_pad(b"Lorem ipsum dolor sit amet, consectetur adipiscing elit.", 64);
+    let data = pkcs7_pad(b"Lorem ipsum dolor sit amet, consectetur adipiscing elit.");
     let key = b"YELLOW SUBMARINE";
     let iv = b"\x00\x00\x00";
     let openssl_iv = &iv.repeat(16)[..16];
@@ -102,7 +111,7 @@ fn aes128_cbc_encrypt_matches_openssl() {
 
 #[test]
 fn aes128_cbc_encrypt_decrypt() {
-    let data = pkcs7_pad(b"Lorem ipsum dolor sit amet, consectetur adipiscing elit.", 64);
+    let data = pkcs7_pad(b"Lorem ipsum dolor sit amet, consectetur adipiscing elit.");
     let key = b"YELLOW SUBMARINE";
     let iv = b"\x00\x00\x00";
     let ciphertext = aes128_cbc_encrypt(key, iv, &data);
