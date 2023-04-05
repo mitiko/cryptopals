@@ -77,16 +77,18 @@ fn challange11() {
     }
 }
 
+const SECRET: &str = "
+Um9sbGluJyBpbiBteSA1LjAKV2l0aCBteSByYWctdG9wIGRvd24gc28gbXkg
+aGFpciBjYW4gYmxvdwpUaGUgZ2lybGllcyBvbiBzdGFuZGJ5IHdhdmluZyBq
+dXN0IHRvIHNheSBoaQpEaWQgeW91IHN0b3A/IE5vLCBJIGp1c3QgZHJvdmUg
+YnkK";
+
 // vulnerable function
 fn ecb_random(plaintext: &[u8]) -> Vec<u8> {
     let mut rng = rand::rngs::StdRng::from_seed([57; 32]);
 
     let key = rng.gen();
-    let suffix_str = base64_to_raw("
-    Um9sbGluJyBpbiBteSA1LjAKV2l0aCBteSByYWctdG9wIGRvd24gc28gbXkg
-    aGFpciBjYW4gYmxvdwpUaGUgZ2lybGllcyBvbiBzdGFuZGJ5IHdhdmluZyBq
-    dXN0IHRvIHNheSBoaQpEaWQgeW91IHN0b3A/IE5vLCBJIGp1c3QgZHJvdmUg
-    YnkK");
+    let suffix_str = base64_to_raw(SECRET);
 
     let data = {
         let mut data = Vec::with_capacity(plaintext.len() + suffix_str.len());
@@ -117,17 +119,45 @@ fn get_suffix_len() -> usize {
 }
 
 #[test]
-fn challange12() {
+pub fn challange12() {
     assert_eq!(get_block_size(), 16);
     assert_eq!(detection_oracle(&b"0".repeat(16*4)), Mode::ECB);
     let suffix_len = get_suffix_len();
     assert_eq!(suffix_len, 138);
 
-    // let known_plaintext = Vec::new();
+    fn get_nth_block(data: &[u8], n: usize) -> u128 {
+        let block = data
+            .iter()
+            .skip(n * 16)
+            .take(16)
+            .map(|&x| x)
+            .collect::<Vec<_>>();
+        u128::from_be_bytes(block.try_into().unwrap())
+    }
 
-    // use the current prefix + each byte from 0 to 255
-    // the one that matches the block_id with only the prefix is ours
-    // assert only one matches?
+    let mut known_plaintext: Vec<u8> = Vec::new();
+    while known_plaintext.len() != suffix_len {
+        let block_id = known_plaintext.len() / 16;
+        let prefix_len = 15 - (known_plaintext.len() % 16);
+        let mut msg = b"A".repeat(prefix_len);
+        msg.extend_from_slice(&known_plaintext);
 
-    // append the new byte & move the block_id if needed (pos % 16 == 1)
+        let truth_cipher = ecb_random(&msg[..prefix_len]);
+        let true_hash = get_nth_block(&truth_cipher, block_id);
+
+        let mut possible_bytes = Vec::new();
+        for byte in 0x00..=0xff {
+            msg.push(byte);
+            let search_cipher = ecb_random(&msg);
+            let search_hash = get_nth_block(&search_cipher, block_id);
+            if search_hash == true_hash {
+                possible_bytes.push(byte);
+            }
+            msg.pop();
+        }
+        assert_eq!(possible_bytes.len(), 1);
+        known_plaintext.push(possible_bytes[0]);
+    }
+
+    assert_eq!(known_plaintext, base64_to_raw(SECRET));
 }
