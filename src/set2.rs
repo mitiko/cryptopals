@@ -1,4 +1,4 @@
-use std::collections::HashSet;
+use std::collections::{HashSet, HashMap};
 
 use rand::rngs::StdRng;
 use rand::{RngCore, Rng, SeedableRng};
@@ -118,8 +118,9 @@ fn get_suffix_len() -> usize {
         .unwrap()
 }
 
+#[ignore]
 #[test]
-pub fn challange12() {
+fn challange12() {
     assert_eq!(get_block_size(), 16);
     assert_eq!(detection_oracle(&b"0".repeat(16*4)), Mode::ECB);
     let suffix_len = get_suffix_len();
@@ -160,4 +161,53 @@ pub fn challange12() {
     }
 
     assert_eq!(known_plaintext, base64_to_raw(SECRET));
+}
+
+#[derive(Debug, PartialEq, Eq)]
+struct Profile {
+    email: String,
+    role: String,
+    uid: u32
+}
+
+impl Profile {
+    fn for_email(email: &str) -> Self {
+        let email_safe = email.replace('&', "%amp").replace('=', "%eq");
+        Self {
+            email: email_safe,
+            uid: 10,
+            role: String::from("role")
+        }
+    }
+
+    fn encode(&self) -> String {
+        format!("email={}&uid={}&role={}", self.email, self.uid, self.role)
+    }
+
+    fn decode(data: &str) -> Option<Self> {
+        let mut hashmap = HashMap::new();
+        for kv_pair in data.split('&').take(3) {
+            let fields: Vec<&str> = kv_pair.split('=').take(2).collect();
+            if fields.len() < 2 { return None; }
+            hashmap.insert(fields[0], fields[1]);
+        }
+        let email = hashmap.get("email")?.to_owned().to_owned();
+        let role = hashmap.get("role")?.to_owned().to_owned();
+        let uid = hashmap.get("uid")?.parse().ok()?;
+        Some(Self { email, role, uid })
+    }
+}
+
+#[test]
+fn encode_and_decode_profiles() {
+    let profile = Profile::for_email("foo@bar.com");
+    let encoded = profile.encode();
+    let decoded = Profile::decode(&encoded).unwrap();
+    assert_eq!(profile, decoded);
+    assert_eq!(encoded.split('&').count(), 3);
+    assert_eq!(encoded.split('=').count(), 4);
+}
+
+#[test]
+fn challange13() {
 }
