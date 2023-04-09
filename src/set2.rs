@@ -78,11 +78,10 @@ fn challange11() {
 }
 
 #[test]
-/// PKCS#7 padding validation
 fn challange14() {
     assert_eq!(pkcs7_unpad(b"ICE ICE BABY\x04\x04\x04\x04"), Some(b"ICE ICE BABY".to_vec()));
     assert_eq!(pkcs7_unpad(b"ICE ICE BABY\x05\x05\x05\x05"), None);
-    assert_eq!(pkcs7_unpad(b"ICE ICE BABY\x01\x02\x03\x04\x05"), None);
+    assert_eq!(pkcs7_unpad(b"ICE ICE BABY\x05\x04\x04\x04"), None);
 }
 
 const SECRET: &str = "
@@ -122,7 +121,7 @@ fn get_suffix_len() -> usize {
     (1..16)
         .map(|i| (i, ecb_random(&b"A".repeat(i)).len()))
         .find(|&(_, cipher_size)| cipher_size > initial_cipher_size)
-        .map(|(prefix_len, _)| initial_cipher_size - prefix_len + 1)
+        .map(|(prefix_len, _)| initial_cipher_size - prefix_len)
         .unwrap()
 }
 
@@ -132,7 +131,7 @@ fn challange12() {
     assert_eq!(get_block_size(), 16);
     assert_eq!(detection_oracle(&b"0".repeat(16*4)), Mode::ECB);
     let suffix_len = get_suffix_len();
-    assert_eq!(suffix_len, 139);
+    assert_eq!(suffix_len, 138);
 
     fn get_nth_block(data: &[u8], n: usize) -> u128 {
         let block = data
@@ -168,8 +167,7 @@ fn challange12() {
         known_plaintext.push(possible_bytes[0]);
     }
 
-    let secret = pkcs7_unpad(&known_plaintext).unwrap();
-    assert_eq!(secret, base64_to_raw(SECRET));
+    assert_eq!(known_plaintext, base64_to_raw(SECRET));
 }
 
 #[derive(Debug, PartialEq, Eq)]
