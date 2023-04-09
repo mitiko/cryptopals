@@ -107,19 +107,21 @@ fn ecb_random(plaintext: &[u8]) -> Vec<u8> {
     aes128_ecb_encrypt(&key, &data)
 }
 
-fn get_block_size() -> usize {
-    let initial_cipher_size = ecb_random(b"").len();
+fn get_block_size<F>(insecure_fn: F) -> usize
+where F: Fn(&[u8]) -> Vec<u8> {
+    let initial_cipher_size = insecure_fn(b"").len();
     (1..(1 << 16))
-        .map(|i| ecb_random(&b"A".repeat(i)).len())
+        .map(|i| insecure_fn(&b"A".repeat(i)).len())
         .find(|&cipher_size| cipher_size > initial_cipher_size)
         .map(|cipher_size| cipher_size - initial_cipher_size)
         .unwrap()
 }
 
-fn get_suffix_len() -> usize {
-    let initial_cipher_size = ecb_random(b"").len();
+fn get_suffix_len<F>(insecure_fn: F) -> usize
+where F: Fn(&[u8]) -> Vec<u8> {
+    let initial_cipher_size = insecure_fn(b"").len(); 
     (1..16)
-        .map(|i| (i, ecb_random(&b"A".repeat(i)).len()))
+        .map(|i| (i, insecure_fn(&b"A".repeat(i)).len()))
         .find(|&(_, cipher_size)| cipher_size > initial_cipher_size)
         .map(|(prefix_len, _)| initial_cipher_size - prefix_len)
         .unwrap()
@@ -128,9 +130,9 @@ fn get_suffix_len() -> usize {
 #[ignore]
 #[test]
 fn challange12() {
-    assert_eq!(get_block_size(), 16);
+    assert_eq!(get_block_size(ecb_random), 16);
     assert_eq!(detection_oracle(&b"0".repeat(16*4)), Mode::ECB);
-    let suffix_len = get_suffix_len();
+    let suffix_len = get_suffix_len(ecb_random);
     assert_eq!(suffix_len, 138);
 
     fn get_nth_block(data: &[u8], n: usize) -> u128 {
@@ -238,4 +240,39 @@ fn encrypt_and_decrypt_profile() {
 
 #[test]
 fn challange13() {
+    let key = rand::rngs::StdRng::from_seed([57; 32]).gen();
+    let get_encrypted_profile = |data: &[u8]| -> Vec<u8> {
+        let profile = Profile::for_email(&String::from_utf8_lossy(data));
+        profile.encrypt_with_key(&key)
+    };
+    assert_eq!(get_block_size(get_encrypted_profile), 16);
+    assert_eq!(detection_oracle(&b"0".repeat(16*4)), Mode::ECB);
+    let static_len = get_suffix_len(get_encrypted_profile); // prefix + suffix
+    assert_eq!(static_len, 23);
+    // do we find the ending ""=user" or do we *know* the message format?
+    // challange 15 seems to do this, so let's keep it easy here.
+
+    // get len when "user" will overflow into next block
+    // static_len + email_len = n*16 + b"user".len()
+    // n = ceil((static_len - b"user".len()) / 16) * 16
+    // email_len = n*16 - static_len + b"user".len()
+    // example: [email=123456789a] [bcd&uid=10&role=] [user............]
+    let multiple_of_16 = 16 + (static_len - "user".len()) >> 4 << 4;
+    let email_len = multiple_of_16 - static_len + b"user".len();
+    assert_eq!(email_len, 13);
+    let ciphertext = get_encrypted_profile(&b"A".repeat(email_len));
+
+    let admin_encrypted = { // encrypt block with the unknown key
+        let mut data = b"A".repeat(16 - b"email=".len());
+        let malicious_text = pkcs7_pad(b"admin");
+        data.extend_from_slice(&malicious_text);
+        &get_encrypted_profile(&data)[16..32] // second block
+    };
+
+    let block_count = ciphertext.len() / 16;
+    let mut cipher_malicious = ciphertext[..(block_count - 1) * 16].to_vec();
+    cipher_malicious.extend_from_slice(admin_encrypted);
+
+    let malicious_profile = Profile::decrypt_with_key(&key, &cipher_malicious);
+    assert_eq!(malicious_profile.unwrap().role, "admin");
 }
