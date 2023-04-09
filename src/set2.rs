@@ -77,6 +77,14 @@ fn challange11() {
     }
 }
 
+#[test]
+/// PKCS#7 padding validation
+fn challange14() {
+    assert_eq!(pkcs7_unpad(b"ICE ICE BABY\x04\x04\x04\x04"), Some(b"ICE ICE BABY".to_vec()));
+    assert_eq!(pkcs7_unpad(b"ICE ICE BABY\x05\x05\x05\x05"), None);
+    assert_eq!(pkcs7_unpad(b"ICE ICE BABY\x01\x02\x03\x04\x05"), None);
+}
+
 const SECRET: &str = "
 Um9sbGluJyBpbiBteSA1LjAKV2l0aCBteSByYWctdG9wIGRvd24gc28gbXkg
 aGFpciBjYW4gYmxvdwpUaGUgZ2lybGllcyBvbiBzdGFuZGJ5IHdhdmluZyBq
@@ -124,7 +132,7 @@ fn challange12() {
     assert_eq!(get_block_size(), 16);
     assert_eq!(detection_oracle(&b"0".repeat(16*4)), Mode::ECB);
     let suffix_len = get_suffix_len();
-    assert_eq!(suffix_len, 138);
+    assert_eq!(suffix_len, 139);
 
     fn get_nth_block(data: &[u8], n: usize) -> u128 {
         let block = data
@@ -160,7 +168,8 @@ fn challange12() {
         known_plaintext.push(possible_bytes[0]);
     }
 
-    assert_eq!(known_plaintext, base64_to_raw(SECRET));
+    let secret = pkcs7_unpad(&known_plaintext).unwrap();
+    assert_eq!(secret, base64_to_raw(SECRET));
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -196,6 +205,18 @@ impl Profile {
         let uid = hashmap.get("uid")?.parse().ok()?;
         Some(Self { email, role, uid })
     }
+
+    fn encrypt_with_key(&self, key: &[u8; 16]) -> Vec<u8> {
+        let stringified = self.encode();
+        let bytes = pkcs7_pad(stringified.as_bytes());
+        aes128_ecb_encrypt(key, &bytes)
+    }
+
+    fn decrypt_with_key(key: &[u8; 16], ciphertext: &[u8]) -> Option<Self> {
+        let raw_bytes = aes128_ecb_decrypt(key, ciphertext);
+        let bytes = pkcs7_unpad(&raw_bytes)?;
+        Self::decode(&String::from_utf8(bytes).ok()?)
+    }
 }
 
 #[test]
@@ -206,6 +227,15 @@ fn encode_and_decode_profiles() {
     assert_eq!(profile, decoded);
     assert_eq!(encoded.split('&').count(), 3);
     assert_eq!(encoded.split('=').count(), 4);
+}
+
+#[test]
+fn encrypt_and_decrypt_profile() {
+    let key = rand::rngs::StdRng::from_seed([57; 32]).gen();
+    let profile = Profile::for_email("foo@bar.com");
+    let encrypted = profile.encrypt_with_key(&key);
+    let decrypted = Profile::decrypt_with_key(&key, &encrypted).unwrap();
+    assert_eq!(profile, decrypted);
 }
 
 #[test]

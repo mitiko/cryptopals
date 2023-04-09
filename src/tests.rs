@@ -93,9 +93,8 @@ fn pkcs7_exact() {
 fn pkcs7_auto() {
     let input_aligned = b"YELLOW SUBMARINE";
     let input_not_aligned = b"YELLOW SUBMARINE111";
-    let output_not_aligned = b"YELLOW SUBMARINE111\x0d\x0d\x0d\x0d\x0d\x0d\x0d\x0d\x0d\x0d\x0d\x0d\x0d";
-    assert_eq!(pkcs7_pad(input_aligned), input_aligned);
-    assert_eq!(pkcs7_pad(input_not_aligned), output_not_aligned);
+    assert_eq!(pkcs7_pad(input_aligned), b"YELLOW SUBMARINE\x10\x10\x10\x10\x10\x10\x10\x10\x10\x10\x10\x10\x10\x10\x10\x10");
+    assert_eq!(pkcs7_pad(input_not_aligned), b"YELLOW SUBMARINE111\x0d\x0d\x0d\x0d\x0d\x0d\x0d\x0d\x0d\x0d\x0d\x0d\x0d");
 }
 
 #[test]

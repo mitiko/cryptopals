@@ -3,6 +3,7 @@ use openssl::symm::{Cipher, Crypter, Mode};
 #[derive(Debug)]
 pub struct PlaintextNotAligned;
 
+// https://www.rfc-editor.org/rfc/rfc5652#section-6.3
 pub fn pkcs7_pad_to(to_size: usize, data: &[u8]) -> Vec<u8> {
     assert!(data.len() <= to_size && to_size - data.len() <= usize::from(u8::MAX));
     let mut output = data.to_vec();
@@ -13,9 +14,20 @@ pub fn pkcs7_pad_to(to_size: usize, data: &[u8]) -> Vec<u8> {
 
 /// Pads to a block size of 16
 pub fn pkcs7_pad(data: &[u8]) -> Vec<u8> {
-    let quot = data.len() % 16;
-    let rem = if quot > 0 { 16 - quot } else { 0 };
+    let rem = 16 - (data.len() % 16);
     pkcs7_pad_to(data.len() + rem, data)
+}
+
+pub fn pkcs7_unpad(data: &[u8]) -> Option<Vec<u8>> {
+    if data.len() % 16 != 0 { return None; }
+    let pad_byte = data.last().unwrap_or(&0xff).to_owned();
+    dbg!(pad_byte);
+    if pad_byte >= 0x10 { return None; }
+    let pad_start = data.len() - usize::from(pad_byte);
+    let unpadded = data[pad_start..].to_vec();
+    dbg!(unpadded.len(), pad_start, data.len());
+    if unpadded.iter().all(|&byte| byte == pad_byte)
+    { Some(data[..pad_start].to_vec()) } else { None }
 }
 
 /// Panics if plaintext is not 16-byte aligned
