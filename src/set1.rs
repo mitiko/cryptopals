@@ -1,7 +1,7 @@
 use std::collections::HashSet;
 
 use crate::utils::{conversions::*, io::*};
-use crate::{xor::*, ecb::*};
+use crate::{ecb::*, xor::*};
 use lazy_static::lazy_static;
 
 #[test]
@@ -52,7 +52,9 @@ fn xor_cross_entropy_analysis(encoded: &[u8]) -> (u8, f64) {
         let decoded: Vec<u8> = encoded.iter().map(|byte| byte ^ key).collect();
         let freq: Vec<f64> = {
             let mut counts = [1.0; 256];
-            decoded.iter().for_each(|&byte| counts[usize::from(byte)] += 1.0);
+            decoded
+                .iter()
+                .for_each(|&byte| counts[usize::from(byte)] += 1.0);
             let sum: f64 = counts.iter().sum();
             counts.iter().map(|c| c / sum).collect()
         };
@@ -90,21 +92,19 @@ fn challange4() {
 
     let bytes = input.iter().skip(line_id).next().unwrap();
     let (key, _) = xor_cross_entropy_analysis(&bytes);
-
-    let decoded: Vec<u8> = bytes.iter().map(|byte| byte ^ key).collect();
-    let output = String::from_utf8_lossy(&decoded);
+    let decoded: Vec<u8> = xor_rep(bytes, &[key]);
 
     assert_eq!(key, 53);
-    assert_eq!(output, "Now that the party is jumping\n");
+    assert_eq!(decoded, b"Now that the party is jumping\n");
 }
 
 #[test]
 fn challange5() {
-    let key = "ICE".as_bytes();
-    let input = "Burning 'em, if you ain't quick and nimble\nI go crazy when I hear a cymbal";
+    let key = b"ICE";
+    let input = b"Burning 'em, if you ain't quick and nimble\nI go crazy when I hear a cymbal";
     let output = "0b3637272a2b2e63622c2e69692a23693a2a3c6324202d623d63343c2a26226324272765272a282b2f20430a652e2c652a3124333a653e2b2027630c692b20283165286326302e27282f";
 
-    assert_eq!(xor_rep(input.as_bytes(), key), hex_to_raw(output));
+    assert_eq!(xor_rep(input, key), hex_to_raw(output));
 }
 
 #[test]
@@ -113,10 +113,13 @@ fn challange6() {
 
     let mut key_size = 0;
     let mut min_hamming_distance = f64::MAX;
+    // find the block length (key size) that produces the minimal
+    // hamming distance for two consecutive blocks
+    // * for resilience, I'm using 4x the block length
     for l in 2..=40 {
         // test 4 blocks of key_size
-        let hd = hamming_distance(&bytes[..4*l], &bytes[4*l..8*l]);
-        let normalized_hd = f64::from(hd) / f64::from(u8::try_from(l).unwrap());
+        let hd = hamming_distance(&bytes[..4 * l], &bytes[4 * l..8 * l]);
+        let normalized_hd = f64::from(hd) / f64::from(l as u8);
         if normalized_hd < min_hamming_distance {
             min_hamming_distance = normalized_hd;
             key_size = l;
@@ -125,7 +128,8 @@ fn challange6() {
 
     let key: Vec<u8> = (0..key_size)
         .map(|offset| {
-            bytes.iter()
+            bytes
+                .iter()
                 .skip(offset)
                 .step_by(key_size)
                 .map(|&x| x)
@@ -137,12 +141,10 @@ fn challange6() {
     // encryption is symmetric
     let raw = xor_rep(&bytes, &key);
     std::fs::write("data/decoded/set1-challange6.txt", raw).unwrap();
-    assert_eq!(key, [
-        0x54, 0x65, 0x72, 0x6d, 0x69, 0x6e, 0x61, 0x74,
-        0x6f, 0x72, 0x20, 0x58, 0x3a, 0x20, 0x42, 0x72,
-        0x69, 0x6e, 0x67, 0x20, 0x74, 0x68, 0x65, 0x20,
-        0x6e, 0x6f, 0x69, 0x73, 0x65
-    ]);
+    assert_eq!(
+        key,
+        hex_to_raw("5465726d696e61746f7220583a204272696e6720746865206e6f697365")
+    );
 }
 
 #[test]
@@ -159,17 +161,20 @@ fn challange8() {
 
     // find which one has the most repetitions
     // luckily 16 bytes fit into u128 :))
-    let (line, _) = input.iter().enumerate()
+    let (line, _) = input
+        .iter()
+        .enumerate()
         .min_by_key(|(_, encoded)| {
             assert_eq!(encoded.len(), 160);
             let mut set = HashSet::new();
             for i in (0..encoded.len()).step_by(16) {
-                let block = &encoded[i..i+16];
+                let block = &encoded[i..i + 16];
                 let block_data = u128::from_be_bytes(block.try_into().unwrap());
                 set.insert(block_data);
             }
             set.len()
-        }).unwrap();
+        })
+        .unwrap();
 
     assert_eq!(line, 132);
 }
