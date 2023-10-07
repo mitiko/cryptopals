@@ -8,8 +8,12 @@ pub fn hex_to_raw(input: &str) -> Vec<u8> {
         .collect()
 }
 
-pub fn raw_to_hex(_buf: &[u8]) -> Vec<u8> {
-    todo!()
+pub fn raw_to_hex(buf: &[u8]) -> Vec<u8> {
+    buf
+        .iter()
+        .map(|byte| format!("{byte:x}").as_bytes().to_owned())
+        .flatten()
+        .collect()
 }
 
 pub fn raw_to_base64(buf: &[u8]) -> Vec<u8> {
@@ -70,7 +74,11 @@ pub fn base64_to_raw(input: &str) -> Vec<u8> {
         });
 
     loop {
-        let (Some(a), Some(b), Some(c), Some(d)) = (chars.next(), chars.next(), chars.next(), chars.next()) else { break };
+        let (Some(a), Some(b), Some(c), Some(d)) =
+            (chars.next(), chars.next(), chars.next(), chars.next())
+        else {
+            break;
+        };
         let mut buf = (u32::from(a) << 6) | u32::from(b);
         if c == 64 {
             output.push(u8::try_from(buf >> 4).unwrap());
@@ -101,32 +109,33 @@ mod tests {
 
     #[test]
     fn convert_hex_to_raw() {
-        let input = "74657374";
-        let output = vec![0x74, 0x65, 0x73, 0x74];
-        assert_eq!(hex_to_raw(input), output);
+        assert_eq!(hex_to_raw("74657374"), vec![0x74, 0x65, 0x73, 0x74]);
     }
 
     #[test]
     fn convert_raw_to_base64() {
-        // TODO: Add multiple tests like in convert_base64_to_raw
-        let input = &[0x74, 0x65, 0x73, 0x74];
-        let output = "dGVzdA==";
-        assert_eq!(raw_to_base64(input), output.as_bytes());
+        assert_eq!(raw_to_base64(&[0x31]), b"MQ==");
+        assert_eq!(raw_to_base64(&[0x31, 0x32]), b"MTI=");
+        assert_eq!(raw_to_base64(&[0x31, 0x32, 0x33]), b"MTIz");
+        assert_eq!(raw_to_base64(&[0x31, 0x32, 0x33, 0x34]), b"MTIzNA==");
     }
 
     #[test]
     fn convert_base64_to_raw() {
-        let inputs = ["MQ==", "MTI=", "MTIz", "MTIzNDU2Nw=="];
-        assert_eq!(base64_to_raw(inputs[0]), [0x31]);
-        assert_eq!(base64_to_raw(inputs[1]), [0x31, 0x32]);
-        assert_eq!(base64_to_raw(inputs[2]), [0x31, 0x32, 0x33]);
-        assert_eq!(
-            base64_to_raw(inputs[3]),
-            [0x31, 0x32, 0x33, 0x34, 0x35, 0x36, 0x37]
-        );
+        assert_eq!(base64_to_raw("MQ=="), [0x31]);
+        assert_eq!(base64_to_raw("MTI="), [0x31, 0x32]);
+        assert_eq!(base64_to_raw("MTIz"), [0x31, 0x32, 0x33]);
+        assert_eq!(base64_to_raw("MTIzNA=="), [0x31, 0x32, 0x33, 0x34]);
+        assert_eq!(base64_to_raw("MTIzND=="), [0x31, 0x32, 0x33, 0x34]);
     }
 
-    // TODO: convert raw_to_hex
+    #[test]
+    fn convert_raw_to_hex() {
+        assert_eq!(raw_to_hex(&[0x65]), b"65");
+        assert_eq!(raw_to_hex(&[0x65, 0x66]), b"6566");
+        assert_eq!(raw_to_hex(&[0x65, 0x66, 0x67]), b"656667");
+    }
+
     // TODO: convert hex_to_base64
     // TODO: convert base64_to_base64
 
@@ -139,13 +148,15 @@ mod tests {
     fn convert_raw_to_base64_to_raw() {
         let input = b"Lorem ipsum dolor sit amet, consectetur adipiscing elit.";
         let base64 = raw_to_base64(input);
-        assert_eq!(base64_to_raw(std::str::from_utf8(&base64).unwrap()), input);
+        let output = base64_to_raw(std::str::from_utf8(&base64).unwrap());
+        assert_eq!(output, input);
     }
 
     #[test]
     fn convert_base64_to_raw_to_base64() {
         let input = "TG9yZW0gaXBzdW0gZG9sb3Igc2l0IGFtZXQsIGNvbnNlY3RldHVyIGFkaXBpc2NpbmcgZWxpdC4=";
         let raw = base64_to_raw(input);
-        assert_eq!(std::str::from_utf8(&raw_to_base64(&raw)).unwrap(), input);
+        let output = &raw_to_base64(&raw);
+        assert_eq!(output, input.as_bytes());
     }
 }
