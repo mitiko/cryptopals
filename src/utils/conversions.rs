@@ -16,6 +16,10 @@ pub fn raw_to_hex(buf: &[u8]) -> Vec<u8> {
         .collect()
 }
 
+pub fn raw_to_hex_str(buf: &[u8]) -> String {
+    String::from_utf8(raw_to_hex(buf)).unwrap()
+}
+
 pub fn raw_to_base64(buf: &[u8]) -> Vec<u8> {
     let mut output = Vec::with_capacity(4 * buf.len() / 3);
     let mut it = buf.iter();
