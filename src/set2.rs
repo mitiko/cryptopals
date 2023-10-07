@@ -28,20 +28,27 @@ enum Mode {
     ECB,
     CBC,
 }
-fn encryption_oracle(plaintext: &[u8], seed: [u8; 32]) -> (Mode, Vec<u8>) {
-    let mut rng = rand::rngs::StdRng::from_seed(seed);
 
-    fn gen_twig(rng: &mut StdRng) -> Vec<u8> {
-        let len = rng.gen_range(5..=10);
-        let mut data = vec![0; len];
-        rng.fill_bytes(&mut data);
-        data
-    }
+/// Generates a buffer with random length and random bytes
+fn gen_twig(
+    range: impl rand::distributions::uniform::SampleRange<usize>,
+    rng: &mut StdRng,
+) -> Vec<u8> {
+    let len = rng.gen_range(range);
+    let mut data = vec![0; len];
+    rng.fill_bytes(&mut data);
+    data
+}
+
+/// Encrypts with either ECB or CBC
+fn encryption_oracle(plaintext: &[u8], seed: [u8; 32]) -> (Mode, Vec<u8>) {
+    // we take in the seed to test with multiple keys and suffixes
+    let mut rng = rand::rngs::StdRng::from_seed(seed);
 
     let key = rng.gen();
     let iv: [_; 16] = rng.gen();
-    let mut prefix = gen_twig(&mut rng);
-    let suffix = gen_twig(&mut rng);
+    let mut prefix = gen_twig(5..=10, &mut rng);
+    let suffix = gen_twig(5..=10, &mut rng);
     let mode = if rng.gen() { Mode::ECB } else { Mode::CBC };
     let data = {
         prefix.extend_from_slice(plaintext);
@@ -56,6 +63,8 @@ fn encryption_oracle(plaintext: &[u8], seed: [u8; 32]) -> (Mode, Vec<u8>) {
     (mode, ciphertext)
 }
 
+/// Detects ECB or CBC by finding repeating blocks
+/// For this to work plaintext must've been repeating data
 fn detection_oracle(ciphertext: &[u8]) -> Mode {
     // same code as in challange 8
     let mut set = HashSet::new();
@@ -85,7 +94,7 @@ fn challange11() {
 }
 
 #[test]
-fn challange14() {
+fn challange15() {
     assert_eq!(
         pkcs7_unpad(b"ICE ICE BABY\x04\x04\x04\x04"),
         Some(b"ICE ICE BABY".to_vec())
@@ -102,22 +111,25 @@ YnkK";
 
 // vulnerable function
 fn ecb_random(plaintext: &[u8]) -> Vec<u8> {
+    // only for consistency (not actually required to use a seed)
     let mut rng = rand::rngs::StdRng::from_seed([57; 32]);
 
+    // random key
     let key = rng.gen();
-    let suffix_str = base64_to_raw(SECRET);
+    let suffix = base64_to_raw(SECRET);
 
     let data = {
-        let mut data = Vec::with_capacity(plaintext.len() + suffix_str.len() + 16);
+        let mut data = Vec::with_capacity(plaintext.len() + suffix.len() + 16);
         data.extend_from_slice(plaintext);
-        data.extend_from_slice(&suffix_str);
+        data.extend_from_slice(&suffix);
         pkcs7_pad(&data)
     };
 
     aes128_ecb_encrypt(&key, &data)
 }
 
-fn get_block_size<F>(insecure_fn: F) -> usize
+/// Detects the block size of a vulnerable ECB fn
+fn detect_block_size<F>(insecure_fn: F) -> usize
 where
     F: Fn(&[u8]) -> Vec<u8>,
 {
@@ -129,24 +141,60 @@ where
         .unwrap()
 }
 
-fn get_suffix_len<F>(insecure_fn: F) -> usize
+/// Detects the suffix length of a vulnerable non prefixed ECB function
+fn detect_suffix_len<F>(insecure_fn: F) -> usize
 where
     F: Fn(&[u8]) -> Vec<u8>,
 {
+    // An empty plaintext will give us the padded length of the encrypted suffix
+    // we want to extract the real length
+    // A simple bruteforce attack is sufficient
+    // the prefix that changes the ciphertext's block count must've aligned the
+    // suffix perfectly on the start of the next block
+    // Thus, if we substract from the initial cipher size this prefix length
+    // we'll get the suffix length
     let initial_cipher_size = insecure_fn(b"").len();
-    (1..16)
+    (1..=16)
+        .into_iter()
         .map(|i| (i, insecure_fn(&b"A".repeat(i)).len()))
         .find(|&(_, cipher_size)| cipher_size > initial_cipher_size)
         .map(|(prefix_len, _)| initial_cipher_size - prefix_len)
         .unwrap()
 }
 
+#[test]
+fn test_suffix_len_detection() {
+    let vuln_fn_generator = |suffix_len: usize| {
+        move |plaintext: &[u8]| {
+            let mut rng = rand::rngs::StdRng::from_seed([57; 32]);
+
+            // random key
+            let key = rng.gen();
+            let suffix = b"A".repeat(suffix_len);
+
+            let data = {
+                let mut data = Vec::with_capacity(plaintext.len() + suffix.len() + 16);
+                data.extend_from_slice(plaintext);
+                data.extend_from_slice(&suffix);
+                pkcs7_pad(&data)
+            };
+
+            aes128_ecb_encrypt(&key, &data)
+        }
+    };
+
+    for suffix_len in 16..32 {
+        let vuln_function = vuln_fn_generator(suffix_len);
+        assert_eq!(detect_suffix_len(vuln_function), suffix_len);
+    }
+}
+
 #[ignore]
 #[test]
 fn challange12() {
-    assert_eq!(get_block_size(ecb_random), 16);
+    assert_eq!(detect_block_size(ecb_random), 16);
     assert_eq!(detection_oracle(&b"0".repeat(16 * 4)), Mode::ECB);
-    let suffix_len = get_suffix_len(ecb_random);
+    let suffix_len = detect_suffix_len(ecb_random);
     assert_eq!(suffix_len, 138);
 
     fn get_nth_block(data: &[u8], n: usize) -> u128 {
@@ -261,8 +309,8 @@ fn challange13() {
         let profile = Profile::for_email(&String::from_utf8_lossy(data));
         profile.encrypt_with_key(&key)
     };
-    assert_eq!(get_block_size(get_encrypted_profile), 16);
-    let static_len = get_suffix_len(get_encrypted_profile); // prefix + suffix
+    assert_eq!(detect_block_size(get_encrypted_profile), 16);
+    let static_len = detect_suffix_len(get_encrypted_profile); // prefix + suffix
     assert_eq!(static_len, 23);
     // do we find the ending ""=user" or do we *know* the message format?
     // challange 15 seems to do this, so let's keep it easy here.
@@ -291,4 +339,48 @@ fn challange13() {
 
     let malicious_profile = Profile::decrypt_with_key(&key, &cipher_malicious);
     assert_eq!(malicious_profile.unwrap().role, "admin");
+}
+
+// (less?) vulnerable function
+fn ecb_random_prefixed(plaintext: &[u8]) -> Vec<u8> {
+    // only for consistency (not actually required to use a seed)
+    let mut rng = rand::rngs::StdRng::from_seed([37; 32]);
+
+    let key = rng.gen();
+    let prefix = gen_twig(10..=120, &mut rng);
+    dbg!(prefix.len());
+    let suffix = base64_to_raw(SECRET);
+
+    let data = {
+        let mut data = Vec::with_capacity(prefix.len() + plaintext.len() + suffix.len() + 16);
+        data.extend_from_slice(&prefix);
+        data.extend_from_slice(plaintext);
+        data.extend_from_slice(&suffix);
+        pkcs7_pad(&data)
+    };
+
+    aes128_ecb_encrypt(&key, &data)
+}
+
+/// Detects the suffix length of a vulnerable ECB function
+fn detect_affix_lens<F>(insecure_fn: F) -> (usize, usize)
+where
+    F: Fn(&[u8]) -> Vec<u8>,
+{
+    let initial_cipher_size = insecure_fn(b"").len();
+    // (1..16)
+    //     .map(|i| (i, insecure_fn(&b"A".repeat(i)).len()))
+    //     .find(|&(_, cipher_size)| cipher_size > initial_cipher_size)
+    //     .map(|(prefix_len, _)| initial_cipher_size - prefix_len)
+    //     .unwrap()
+    todo!()
+}
+
+#[test]
+fn challange14() {
+    assert_eq!(detect_block_size(ecb_random_prefixed), 16);
+    assert_eq!(detection_oracle(&b"0".repeat(16 * 4)), Mode::ECB);
+    let (prefix_len, suffix_len) = detect_affix_lens(ecb_random_prefixed);
+    assert_eq!(prefix_len, 85); // consistent due to seed
+    assert_eq!(suffix_len, 138);
 }
