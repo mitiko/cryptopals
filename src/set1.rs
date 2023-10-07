@@ -168,7 +168,7 @@ fn challange8() {
             assert_eq!(encoded.len(), 160);
             (0..encoded.len())
                 .step_by(16)
-                .map(|i| encoded[i..i + 16].as_u128())
+                .map(|i| encoded[i..i + 16].as_u128().unwrap())
                 .collect::<HashSet<_>>()
                 .len()
         })

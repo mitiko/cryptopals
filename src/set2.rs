@@ -70,7 +70,7 @@ fn detection_oracle(ciphertext: &[u8]) -> Mode {
     let mut set = HashSet::new();
     (0..ciphertext.len())
         .step_by(16)
-        .map(|i| ciphertext[i..i + 16].as_u128())
+        .map(|i| ciphertext[i..i + 16].as_u128().unwrap())
         .for_each(|block| drop(set.insert(block)));
 
     if set.len() < ciphertext.len() / 16 {
@@ -204,6 +204,7 @@ fn challange12() {
             .map(|&x| x)
             .collect::<Vec<_>>()
             .as_u128()
+            .unwrap()
     }
 
     let mut known_plaintext: Vec<u8> = Vec::new();
