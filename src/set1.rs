@@ -1,6 +1,6 @@
 use std::collections::HashSet;
 
-use crate::utils::{conversions::*, io::*};
+use crate::utils::{conversions::*, io::*, AsU128};
 use crate::{ecb::*, xor::*};
 use lazy_static::lazy_static;
 
@@ -166,13 +166,11 @@ fn challange8() {
         .enumerate()
         .min_by_key(|(_, encoded)| {
             assert_eq!(encoded.len(), 160);
-            let mut set = HashSet::new();
-            for i in (0..encoded.len()).step_by(16) {
-                let block = &encoded[i..i + 16];
-                let block_data = u128::from_be_bytes(block.try_into().unwrap());
-                set.insert(block_data);
-            }
-            set.len()
+            (0..encoded.len())
+                .step_by(16)
+                .map(|i| encoded[i..i + 16].as_u128())
+                .collect::<HashSet<_>>()
+                .len()
         })
         .unwrap();
 

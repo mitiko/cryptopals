@@ -3,7 +3,7 @@ use std::collections::{HashMap, HashSet};
 use rand::rngs::StdRng;
 use rand::{Rng, RngCore, SeedableRng};
 
-use crate::utils::{conversions::*, io::*};
+use crate::utils::{conversions::*, io::*, AsU128};
 use crate::{cbc::*, ecb::*};
 
 #[test]
@@ -68,11 +68,11 @@ fn encryption_oracle(plaintext: &[u8], seed: [u8; 32]) -> (Mode, Vec<u8>) {
 fn detection_oracle(ciphertext: &[u8]) -> Mode {
     // same code as in challange 8
     let mut set = HashSet::new();
-    for i in (0..ciphertext.len()).step_by(16) {
-        let block = &ciphertext[i..i + 16];
-        let block_data = u128::from_be_bytes(block.try_into().unwrap());
-        set.insert(block_data);
-    }
+    (0..ciphertext.len())
+        .step_by(16)
+        .map(|i| ciphertext[i..i + 16].as_u128())
+        .for_each(|block| drop(set.insert(block)));
+
     if set.len() < ciphertext.len() / 16 {
         Mode::ECB
     } else {
@@ -155,7 +155,6 @@ where
     // we'll get the suffix length
     let initial_cipher_size = insecure_fn(b"").len();
     (1..=16)
-        .into_iter()
         .map(|i| (i, insecure_fn(&b"A".repeat(i)).len()))
         .find(|&(_, cipher_size)| cipher_size > initial_cipher_size)
         .map(|(prefix_len, _)| initial_cipher_size - prefix_len)
@@ -198,13 +197,13 @@ fn challange12() {
     assert_eq!(suffix_len, 138);
 
     fn get_nth_block(data: &[u8], n: usize) -> u128 {
-        let block = data
+        data
             .iter()
             .skip(n * 16)
             .take(16)
             .map(|&x| x)
-            .collect::<Vec<_>>();
-        u128::from_be_bytes(block.try_into().unwrap())
+            .collect::<Vec<_>>()
+            .as_u128()
     }
 
     let mut known_plaintext: Vec<u8> = Vec::new();
