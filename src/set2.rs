@@ -1,10 +1,10 @@
-use std::collections::{HashSet, HashMap};
+use std::collections::{HashMap, HashSet};
 
 use rand::rngs::StdRng;
-use rand::{RngCore, Rng, SeedableRng};
+use rand::{Rng, RngCore, SeedableRng};
 
-use crate::utils::{io::*, conversions::*};
-use crate::{ecb::*, cbc::*};
+use crate::utils::{conversions::*, io::*};
+use crate::{cbc::*, ecb::*};
 
 #[test]
 fn challange9() {
@@ -24,7 +24,10 @@ fn challange10() {
 }
 
 #[derive(PartialEq, Eq, Debug)]
-enum Mode { ECB, CBC }
+enum Mode {
+    ECB,
+    CBC,
+}
 fn encryption_oracle(plaintext: &[u8], seed: [u8; 32]) -> (Mode, Vec<u8>) {
     let mut rng = rand::rngs::StdRng::from_seed(seed);
 
@@ -48,7 +51,7 @@ fn encryption_oracle(plaintext: &[u8], seed: [u8; 32]) -> (Mode, Vec<u8>) {
 
     let ciphertext = match mode {
         Mode::ECB => aes128_ecb_encrypt(&key, &data),
-        Mode::CBC => aes128_cbc_encrypt(&key, &iv, &data)
+        Mode::CBC => aes128_cbc_encrypt(&key, &iv, &data),
     };
     (mode, ciphertext)
 }
@@ -57,11 +60,15 @@ fn detection_oracle(ciphertext: &[u8]) -> Mode {
     // same code as in challange 8
     let mut set = HashSet::new();
     for i in (0..ciphertext.len()).step_by(16) {
-        let block = &ciphertext[i..i+16];
+        let block = &ciphertext[i..i + 16];
         let block_data = u128::from_be_bytes(block.try_into().unwrap());
         set.insert(block_data);
     }
-    if set.len() < ciphertext.len() / 16 { Mode::ECB } else { Mode::CBC }
+    if set.len() < ciphertext.len() / 16 {
+        Mode::ECB
+    } else {
+        Mode::CBC
+    }
 }
 
 #[test]
@@ -79,7 +86,10 @@ fn challange11() {
 
 #[test]
 fn challange14() {
-    assert_eq!(pkcs7_unpad(b"ICE ICE BABY\x04\x04\x04\x04"), Some(b"ICE ICE BABY".to_vec()));
+    assert_eq!(
+        pkcs7_unpad(b"ICE ICE BABY\x04\x04\x04\x04"),
+        Some(b"ICE ICE BABY".to_vec())
+    );
     assert_eq!(pkcs7_unpad(b"ICE ICE BABY\x05\x05\x05\x05"), None);
     assert_eq!(pkcs7_unpad(b"ICE ICE BABY\x05\x04\x04\x04"), None);
 }
@@ -98,7 +108,7 @@ fn ecb_random(plaintext: &[u8]) -> Vec<u8> {
     let suffix_str = base64_to_raw(SECRET);
 
     let data = {
-        let mut data = Vec::with_capacity(plaintext.len() + suffix_str.len());
+        let mut data = Vec::with_capacity(plaintext.len() + suffix_str.len() + 16);
         data.extend_from_slice(plaintext);
         data.extend_from_slice(&suffix_str);
         pkcs7_pad(&data)
@@ -108,7 +118,9 @@ fn ecb_random(plaintext: &[u8]) -> Vec<u8> {
 }
 
 fn get_block_size<F>(insecure_fn: F) -> usize
-where F: Fn(&[u8]) -> Vec<u8> {
+where
+    F: Fn(&[u8]) -> Vec<u8>,
+{
     let initial_cipher_size = insecure_fn(b"").len();
     (1..(1 << 16))
         .map(|i| insecure_fn(&b"A".repeat(i)).len())
@@ -118,8 +130,10 @@ where F: Fn(&[u8]) -> Vec<u8> {
 }
 
 fn get_suffix_len<F>(insecure_fn: F) -> usize
-where F: Fn(&[u8]) -> Vec<u8> {
-    let initial_cipher_size = insecure_fn(b"").len(); 
+where
+    F: Fn(&[u8]) -> Vec<u8>,
+{
+    let initial_cipher_size = insecure_fn(b"").len();
     (1..16)
         .map(|i| (i, insecure_fn(&b"A".repeat(i)).len()))
         .find(|&(_, cipher_size)| cipher_size > initial_cipher_size)
@@ -131,7 +145,7 @@ where F: Fn(&[u8]) -> Vec<u8> {
 #[test]
 fn challange12() {
     assert_eq!(get_block_size(ecb_random), 16);
-    assert_eq!(detection_oracle(&b"0".repeat(16*4)), Mode::ECB);
+    assert_eq!(detection_oracle(&b"0".repeat(16 * 4)), Mode::ECB);
     let suffix_len = get_suffix_len(ecb_random);
     assert_eq!(suffix_len, 138);
 
@@ -176,7 +190,7 @@ fn challange12() {
 struct Profile {
     email: String,
     role: String,
-    uid: u32
+    uid: u32,
 }
 
 impl Profile {
@@ -185,7 +199,7 @@ impl Profile {
         Self {
             email: email_safe,
             uid: 10,
-            role: String::from("role")
+            role: String::from("role"),
         }
     }
 
@@ -197,7 +211,9 @@ impl Profile {
         let mut hashmap = HashMap::new();
         for kv_pair in data.split('&').take(3) {
             let fields: Vec<&str> = kv_pair.split('=').take(2).collect();
-            if fields.len() < 2 { return None; }
+            if fields.len() < 2 {
+                return None;
+            }
             hashmap.insert(fields[0], fields[1]);
         }
         let email = hashmap.get("email")?.to_owned().to_owned();
@@ -246,13 +262,12 @@ fn challange13() {
         profile.encrypt_with_key(&key)
     };
     assert_eq!(get_block_size(get_encrypted_profile), 16);
-    assert_eq!(detection_oracle(&b"0".repeat(16*4)), Mode::ECB);
     let static_len = get_suffix_len(get_encrypted_profile); // prefix + suffix
     assert_eq!(static_len, 23);
     // do we find the ending ""=user" or do we *know* the message format?
     // challange 15 seems to do this, so let's keep it easy here.
 
-    // get len when "user" will overflow into next block
+    // get len when "user" will overflow into next block (n is padding)
     // static_len + email_len = n*16 + b"user".len()
     // n = ceil((static_len - b"user".len()) / 16) * 16
     // email_len = n*16 - static_len + b"user".len()
@@ -262,7 +277,8 @@ fn challange13() {
     assert_eq!(email_len, 13);
     let ciphertext = get_encrypted_profile(&b"A".repeat(email_len));
 
-    let admin_encrypted = { // encrypt block with the unknown key
+    // encrypt block with the unknown key
+    let admin_encrypted = {
         let mut data = b"A".repeat(16 - b"email=".len());
         let malicious_text = pkcs7_pad(b"admin");
         data.extend_from_slice(&malicious_text);
