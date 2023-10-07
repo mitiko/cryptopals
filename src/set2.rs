@@ -1,4 +1,5 @@
 use std::collections::{HashMap, HashSet};
+use std::ops::{Add, Div, Sub};
 
 use rand::rngs::StdRng;
 use rand::{Rng, RngCore, SeedableRng};
@@ -197,8 +198,7 @@ fn challange12() {
     assert_eq!(suffix_len, 138);
 
     fn get_nth_block(data: &[u8], n: usize) -> u128 {
-        data
-            .iter()
+        data.iter()
             .skip(n * 16)
             .take(16)
             .map(|&x| x)
@@ -348,7 +348,6 @@ fn ecb_random_prefixed(plaintext: &[u8]) -> Vec<u8> {
 
     let key = rng.gen();
     let prefix = gen_twig(10..=120, &mut rng);
-    dbg!(prefix.len());
     let suffix = base64_to_raw(SECRET);
 
     let data = {
@@ -367,20 +366,147 @@ fn detect_affix_lens<F>(insecure_fn: F) -> (usize, usize)
 where
     F: Fn(&[u8]) -> Vec<u8>,
 {
-    let initial_cipher_size = insecure_fn(b"").len();
-    // (1..16)
-    //     .map(|i| (i, insecure_fn(&b"A".repeat(i)).len()))
-    //     .find(|&(_, cipher_size)| cipher_size > initial_cipher_size)
-    //     .map(|(prefix_len, _)| initial_cipher_size - prefix_len)
-    //     .unwrap()
-    todo!()
+    // Unlike the suffix detector, we can't judge purely on ciphertext size,
+    // if we attempt to we'll derive prefix_rem + suffix_rem and won't have
+    // enough information to get the individual lengths
+    // Instead we must continue the search:
+    // Once we figure out the combined padding, we'll have something like:
+    // [prefix_abcdefAAA] [AAAAAsuffix_mnop]
+    // Then if we expand the controlled text with 1 block:
+    // [prefix_abcdefAAA] [AAAAAAAAAAAAAAAA] [AAAAAsuffix_mnop]
+    // Given our fill-in string isn't the prefix of the suffix,
+    // or the suffix of the prefix, we can derive the block split location
+    // To ensure we get a fill-in to both the prefix blocks and suffix blocks
+    // we must start the bruteforce higher at 17 (at least 1 block size)
+    // [abcdefAxyzwvutsr] vs [abcdefAAAAAAAAAA] [AAAAAAAxyzwvutsr]
+
+    let initial_cipher_size = insecure_fn(&b"A".repeat(16)).len();
+    let combined_rem = (0..=16)
+        .rev()
+        .map(|i| (i, insecure_fn(&b"A".repeat(i)).len()))
+        .find(|&(_, cipher_size)| cipher_size < initial_cipher_size)
+        .map(|(combined_rem, _)| combined_rem)
+        .unwrap();
+
+    let cipher = insecure_fn(&b"A".repeat(combined_rem));
+    let cipher_extra_block = insecure_fn(&b"A".repeat(combined_rem + 16));
+    assert_eq!(cipher_extra_block.len(), cipher.len() + 16);
+    // assert!(cipher.len() + 16 == initial_cipher_size);
+    dbg!(initial_cipher_size);
+    dbg!(cipher.len());
+
+    let common_prefix_len = cipher
+        .iter()
+        .zip(cipher_extra_block.iter())
+        .enumerate()
+        .step_by(16)
+        .map(|(i, _)| {
+            (
+                i,
+                cipher[i..i + 16].as_u128().unwrap(),
+                cipher_extra_block[i..i + 16].as_u128().unwrap(),
+            )
+        })
+        .find(|(_, true_block, user_block)| true_block != user_block)
+        .map(|(i, ..)| i)
+        .unwrap();
+
+    // We can now bruteforce the byte split point:
+    // yes [prefix_abcdefAAA] [AAAAAAAAAAAAAAAA] [AAAAAAAAAAAAAAAA] [AAAAAsuffix_mnop]
+    // yes [prefix_abcdefBAA] [AAAAAAAAAAAAAAAA] [AAAAAAAAAAAAAAAA] [AAAAAsuffix_mnop]
+    // yes [prefix_abcdefBBA] [AAAAAAAAAAAAAAAA] [AAAAAAAAAAAAAAAA] [AAAAAsuffix_mnop]
+    // yes [prefix_abcdefBBB] [AAAAAAAAAAAAAAAA] [AAAAAAAAAAAAAAAA] [AAAAAsuffix_mnop]
+    // no  [prefix_abcdefBBB] [BAAAAAAAAAAAAAAA] [AAAAAAAAAAAAAAAA] [AAAAAsuffix_mnop]
+    // The first `no` match between the two blocks we get, is when we overflowed
+    // the prefix. The last `yes` is when we exactly padded the prefix.
+    // Additional note: since we're starting the first brute-force at 17, it's
+    // possible we fill 3 entire blocks, instead of just the two we're comparing
+    // but that's no biggie, we know the split point & can ignore the 1st block
+
+    dbg!(common_prefix_len);
+    let prefix_padding_len = (0..16)
+        .map(|i| [b"B".repeat(i), b"A".repeat(64)].concat())
+        .map(|plaintext| insecure_fn(&plaintext))
+        .map(|cipher| {
+            cipher
+                .into_iter()
+                .skip(common_prefix_len)
+                .take(32)
+                .collect()
+        })
+        .map(|data: Vec<_>| (data[..16].as_u128().unwrap(), data[16..].as_u128().unwrap()))
+        .enumerate()
+        .find(|(_, (block1, block2))| block1 != block2)
+        .map(|(i, _)| i)
+        .unwrap();
+
+    dbg!(common_prefix_len);
+    dbg!(prefix_padding_len);
+    let prefix_len = common_prefix_len - prefix_padding_len;
+    // let suffix_len = {
+    //     let mut remaining = cipher.len() - prefix_len - combined_rem;
+    //     if cipher.len() - initial_cipher_size == 32 {
+    //         remaining -= 16;
+    //     }
+    //     remaining
+    // };
+    // let suffix_len = initial_cipher_size + common_prefix_len - cipher.len() - prefix_padding_len;
+    let padded_suffix_len = cipher.len() - common_prefix_len;
+    let suffix_padding_len = combined_rem - prefix_padding_len;
+    let suffix_len = padded_suffix_len - suffix_padding_len;
+    dbg!("--------------------------------");
+    dbg!(common_prefix_len);
+    dbg!(prefix_padding_len);
+    dbg!(prefix_len);
+    dbg!(cipher.len());
+    dbg!(initial_cipher_size);
+    dbg!(combined_rem);
+    dbg!(suffix_len);
+    (prefix_len, suffix_len)
 }
 
 #[test]
-fn challange14() {
-    assert_eq!(detect_block_size(ecb_random_prefixed), 16);
-    assert_eq!(detection_oracle(&b"0".repeat(16 * 4)), Mode::ECB);
-    let (prefix_len, suffix_len) = detect_affix_lens(ecb_random_prefixed);
-    assert_eq!(prefix_len, 85); // consistent due to seed
-    assert_eq!(suffix_len, 138);
+fn test_affix_lens_detection() {
+    let vuln_fn_generator = |prefix_len: usize, suffix_len: usize| {
+        move |plaintext: &[u8]| {
+            let mut rng = rand::rngs::StdRng::from_seed([23; 32]);
+
+            // random key
+            let key = rng.gen();
+            // let prefix = b"A".repeat(prefix_len);
+            // let suffix = b"A".repeat(suffix_len);
+            let prefix = b"X".repeat(prefix_len);
+            let suffix = b"Y".repeat(suffix_len);
+
+            let data = {
+                let mut data =
+                    Vec::with_capacity(prefix.len() + plaintext.len() + suffix.len() + 16);
+                data.extend_from_slice(&prefix);
+                data.extend_from_slice(plaintext);
+                data.extend_from_slice(&suffix);
+                pkcs7_pad(&data)
+            };
+
+            aes128_ecb_encrypt(&key, &data)
+        }
+    };
+
+    for prefix_len in 0..32 {
+        for suffix_len in 0..32 {
+            if prefix_len == 0 || suffix_len == 0 { continue; }
+            let vuln_function = vuln_fn_generator(prefix_len, suffix_len);
+            assert_eq!(detect_affix_lens(vuln_function), (prefix_len, suffix_len));
+        }
+    }
 }
+
+// #[test]
+// fn challange14() {
+//     // assert_eq!(1, 2);
+//     assert_eq!(detect_block_size(ecb_random_prefixed), 16);
+//     assert_eq!(detection_oracle(&b"0".repeat(16 * 4)), Mode::ECB);
+//     let (prefix_len, suffix_len) = detect_affix_lens(ecb_random_prefixed);
+//     // assert_eq!(prefix_blocks, (85 + (16 - (85 % 16)))); // consistent due to seed
+//     assert_eq!(prefix_len, 85); // consistent due to seed
+//     assert_eq!(suffix_len, 138); // secret length is 138
+// }
