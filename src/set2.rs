@@ -189,22 +189,22 @@ fn test_suffix_len_detection() {
     }
 }
 
+fn get_nth_block(data: &[u8], n: usize) -> u128 {
+    data.iter()
+        .skip(n * 16)
+        .take(16)
+        .map(|&x| x)
+        .collect::<Vec<_>>()
+        .as_u128()
+        .unwrap()
+}
+
 #[test]
 fn challange12() {
     assert_eq!(detect_block_size(ecb_random), 16);
     assert_eq!(detection_oracle(&ecb_random(&b"0".repeat(64))), Mode::ECB);
     let suffix_len = detect_suffix_len(ecb_random);
     assert_eq!(suffix_len, 138);
-
-    fn get_nth_block(data: &[u8], n: usize) -> u128 {
-        data.iter()
-            .skip(n * 16)
-            .take(16)
-            .map(|&x| x)
-            .collect::<Vec<_>>()
-            .as_u128()
-            .unwrap()
-    }
 
     let mut known_plaintext: Vec<u8> = Vec::new();
     while known_plaintext.len() != suffix_len {
@@ -524,4 +524,34 @@ fn challange14() {
     let (prefix_len, suffix_len) = detect_affix_lens(ecb_random_prefixed);
     assert_eq!(prefix_len, 85); // consistent due to seed
     assert_eq!(suffix_len, 138); // secret length is 138
+    let prefix_padding = 16 - (prefix_len % 16);
+    let prefix_block_count = (prefix_len + prefix_padding) / 16;
+
+    let mut known_plaintext: Vec<u8> = Vec::new();
+    while known_plaintext.len() != suffix_len {
+        let block_id = prefix_block_count + known_plaintext.len() / 16;
+        let fill_len = 15 - (known_plaintext.len() % 16);
+        let mut msg = b"A".repeat(prefix_padding);
+        msg.extend_from_slice(&b"A".repeat(fill_len));
+        msg.extend_from_slice(&known_plaintext);
+
+        // leaks the 1 byte that is the prefix of the suffix
+        let truth_cipher = ecb_random_prefixed(&msg[..(prefix_padding + fill_len)]);
+        let true_hash = get_nth_block(&truth_cipher, block_id);
+
+        let mut possible_bytes = Vec::new();
+        for byte in 0x00..0xff {
+            msg.push(byte);
+            let search_cipher = ecb_random_prefixed(&msg);
+            let search_hash = get_nth_block(&search_cipher, block_id);
+            if search_hash == true_hash {
+                possible_bytes.push(byte);
+            }
+            msg.pop();
+        }
+        assert_eq!(possible_bytes.len(), 1);
+        known_plaintext.push(possible_bytes[0]);
+    }
+
+    assert_eq!(known_plaintext, base64_to_raw(SECRET));
 }
