@@ -192,7 +192,7 @@ fn test_suffix_len_detection() {
 #[test]
 fn challange12() {
     assert_eq!(detect_block_size(ecb_random), 16);
-    assert_eq!(detection_oracle(&b"0".repeat(16 * 4)), Mode::ECB);
+    assert_eq!(detection_oracle(&ecb_random(&b"0".repeat(64))), Mode::ECB);
     let suffix_len = detect_suffix_len(ecb_random);
     assert_eq!(suffix_len, 138);
 
@@ -517,13 +517,11 @@ fn test_affix_lens_detection() {
     }
 }
 
-// #[test]
-// fn challange14() {
-//     // assert_eq!(1, 2);
-//     assert_eq!(detect_block_size(ecb_random_prefixed), 16);
-//     assert_eq!(detection_oracle(&b"0".repeat(16 * 4)), Mode::ECB);
-//     let (prefix_len, suffix_len) = detect_affix_lens(ecb_random_prefixed);
-//     // assert_eq!(prefix_blocks, (85 + (16 - (85 % 16)))); // consistent due to seed
-//     assert_eq!(prefix_len, 85); // consistent due to seed
-//     assert_eq!(suffix_len, 138); // secret length is 138
-// }
+#[test]
+fn challange14() {
+    assert_eq!(detect_block_size(ecb_random_prefixed), 16);
+    assert_eq!(detection_oracle(&ecb_random_prefixed(&b"0".repeat(64))), Mode::ECB);
+    let (prefix_len, suffix_len) = detect_affix_lens(ecb_random_prefixed);
+    assert_eq!(prefix_len, 85); // consistent due to seed
+    assert_eq!(suffix_len, 138); // secret length is 138
+}
