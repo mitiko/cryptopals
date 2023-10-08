@@ -75,7 +75,6 @@ fn xor_cross_entropy_analysis(encoded: &[u8]) -> (u8, f64) {
 }
 
 #[test]
-#[ignore]
 fn challange4() {
     let input = read_hex_lines("data/set1/challange4.txt");
 

@@ -189,7 +189,6 @@ fn test_suffix_len_detection() {
     }
 }
 
-#[ignore]
 #[test]
 fn challange12() {
     assert_eq!(detect_block_size(ecb_random), 16);
