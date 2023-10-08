@@ -1,5 +1,5 @@
 use std::collections::{HashMap, HashSet};
-use std::ops::{Add, Div, Sub};
+use std::ops::{Add, Sub};
 
 use rand::rngs::StdRng;
 use rand::{Rng, RngCore, SeedableRng};
@@ -72,7 +72,7 @@ fn detection_oracle(ciphertext: &[u8]) -> Mode {
     (0..ciphertext.len())
         .step_by(16)
         .map(|i| ciphertext[i..i + 16].as_u128().unwrap())
-        .for_each(|block| drop(set.insert(block)));
+        .for_each(|block| { set.insert(block); });
 
     if set.len() < ciphertext.len() / 16 {
         Mode::ECB
@@ -385,13 +385,14 @@ where
     // we may overfill: [abcdefghijklmnoA] [AAAAAAAAAAAAAAAA] [Axyzwvutsrqponml]
     // There is no way to detect if we've overfilled during this bruteforce but
     // we can account for it later, no drama.
-    // Additionally, this allows to shorten the search from 1..31 to 16..32 yay
+    // Additionally, this allows to shorten the search from 1..32 to 16..32 yay
     // We must be careful when searching backwards too because when we've padded
     // perfectly with As pkcs7 adds 1 additional block. Example:
     // [xAAAAAAAAAAAAAAA] [AAAAAAAAAAAAAAAy] [PPPPPPPPPPPPPPPP]
     // Here the count is 30 but we'll detect a change in cipher size at 29.
     // To account for it we can just add 1, but be careful, we must also adjust
-    // the search range - results vary 16..=31, so we search 15..=31
+    // the search range - results vary 16..=32, so we search 15..=31
+    // * also why we substract 16 at the very end computing `suffix_len`
 
     let initial_cipher_size = insecure_fn(&b"A".repeat(32)).len();
     let combined_rem = (15..=31)
@@ -401,8 +402,6 @@ where
         .map(|(combined_rem, _)| combined_rem)
         .unwrap()
         .add(1);
-
-    dbg!(combined_rem);
 
     // PART 2:
     // Now, we'll detect the exact block count of the prefix. Keep in mind if
@@ -429,9 +428,6 @@ where
     let cipher_extra_block = insecure_fn(&b"A".repeat(combined_rem + 16));
     assert_eq!(cipher_extra_block.len(), cipher.len() + 16);
 
-    dbg!(initial_cipher_size);
-    dbg!(cipher.len());
-
     let common_prefix_blocks = cipher
         .iter()
         .zip(cipher_extra_block.iter())
@@ -446,8 +442,6 @@ where
         .take_while(|(true_block, user_block)| true_block == user_block)
         .count();
 
-    dbg!(common_prefix_blocks);
-
     // PART 3:
     // Now that we know the exact prefix blocks count (and know where to look),
     // we can bruteforce the exact padding by changing the filler text & looking
@@ -460,7 +454,7 @@ where
     // The first `no` match between the two blocks we get, is when we overflowed
     // the prefix. The last `yes` is when we exactly padded the prefix.
     // To be sure we'd get at least 2 duplicate blocks,
-    // we need to use >= 32 + max_prefix_padding = 32 + 31 = 63
+    // we need to use >= 32 + max_prefix_padding = 32 + 32 = 64
     // For overfilled blocks we'll match the overfill
     // 00 yes [xAAAAAAAAAAAAAAA] [AAAAAAAAAAAAAAAA] [AAAAAAAAAAAAAAAA] [AAAAAAAAAAAAAAAA]
     // 01 yes [xBAAAAAAAAAAAAAA] [AAAAAAAAAAAAAAAA] [AAAAAAAAAAAAAAAA] [AAAAAAAAAAAAAAAA]
@@ -470,7 +464,7 @@ where
     // 32 no  [xBBBBBBBBBBBBBBB] [BBBBBBBBBBBBBBBB] [BAAAAAAAAAAAAAAA] [AAAAAAAAAAAAAAAA]
     //                the blocks we're comparing     ^^^^^^^^^^^^^^^^   ^^^^^^^^^^^^^^^^
 
-    let prefix_padding_len = (0..=32)
+    let prefix_padding_len = (0..=33)
         .map(|i| [b"B".repeat(i), b"A".repeat(64)].concat())
         .map(|plaintext| insecure_fn(&plaintext))
         .map(|cipher| {
@@ -482,50 +476,30 @@ where
         })
         .map(|data: Vec<_>| (data[..16].as_u128().unwrap(), data[16..].as_u128().unwrap()))
         .enumerate()
-        // .map(|x| {dbg!(x); x})
         .find(|(_, (block1, block2))| block1 != block2)
         .map(|(i, _)| i)
         .unwrap()
-        // .sub(1);
-        // for debugging only
-        .checked_sub(1).expect("Failed to detect exact prefix padding");
+        .sub(1);
+    // // for debugging only
+    // .checked_sub(1).expect("Failed to detect exact prefix padding");
 
-    dbg!(common_prefix_blocks);
-    dbg!(prefix_padding_len);
     let prefix_len = common_prefix_blocks * 16 - prefix_padding_len;
-
-
     let suffix_len = (cipher.len() - 16) - prefix_len - combined_rem;
-    // let padded_suffix_len = cipher.len() - common_prefix_len;
-    // let suffix_padding_len = combined_rem - prefix_padding_len;
-    // let suffix_len = padded_suffix_len - suffix_padding_len;
-    dbg!("--------------------------------");
-    dbg!(common_prefix_blocks);
-    dbg!(prefix_padding_len);
-    dbg!(prefix_len);
-    dbg!(cipher.len());
-    dbg!(initial_cipher_size);
-    dbg!(combined_rem);
-    dbg!(suffix_len);
     (prefix_len, suffix_len)
 }
 
 #[test]
 fn test_affix_lens_detection() {
     let vuln_fn_generator = |prefix_len: usize, suffix_len: usize| {
+        let mut rng = rand::rngs::StdRng::from_seed([23; 32]);
+        let key = rng.gen(); // random key
         move |plaintext: &[u8]| {
-            let mut rng = rand::rngs::StdRng::from_seed([23; 32]);
-
-            // random key
-            let key = rng.gen();
-            // let prefix = b"A".repeat(prefix_len);
-            // let suffix = b"A".repeat(suffix_len);
             let prefix = b"X".repeat(prefix_len);
             let suffix = b"Y".repeat(suffix_len);
 
             let data = {
-                let mut data =
-                    Vec::with_capacity(prefix.len() + plaintext.len() + suffix.len() + 16);
+                let size_hint = prefix.len() + plaintext.len() + suffix.len();
+                let mut data = Vec::with_capacity(size_hint + 16);
                 data.extend_from_slice(&prefix);
                 data.extend_from_slice(plaintext);
                 data.extend_from_slice(&suffix);
@@ -538,15 +512,7 @@ fn test_affix_lens_detection() {
 
     for prefix_len in 0..32 {
         for suffix_len in 0..32 {
-            // skip 0-tests for now
-            if prefix_len == 0 || suffix_len == 0 {
-                continue;
-            }
-            if prefix_len == 16 || suffix_len == 16 {
-                continue;
-            }
             let vuln_function = vuln_fn_generator(prefix_len, suffix_len);
-            dbg!("xxxxx", prefix_len, suffix_len, "xxxxx");
             assert_eq!(detect_affix_lens(vuln_function), (prefix_len, suffix_len));
         }
     }
