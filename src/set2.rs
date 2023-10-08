@@ -564,3 +564,75 @@ fn challange15() {
     assert_eq!(pkcs7_unpad(b"ICE ICE BABY\x05\x05\x05\x05"), None);
     assert_eq!(pkcs7_unpad(b"ICE ICE BABY\x05\x04\x04\x04"), None);
 }
+
+// vulnerable function
+fn encrypt_user_data(user_data: &[u8]) -> Vec<u8> {
+    // only for consistency (not actually required to use a seed)
+    let mut rng = rand::rngs::StdRng::from_seed([29; 32]);
+    let key = rng.gen();
+    let iv = gen_twig(5..=23, &mut rng);
+
+    let prefix = b"comment1=cooking%20MCs;userdata=";
+    let suffix = b";comment2=%20like%20a%20pound%20of%20bacon";
+
+    let escaped_user_data: Vec<_> = user_data
+        .iter()
+        .map(|&byte| {
+            if b";&=%".contains(&byte) {
+                [vec![b'%'], raw_to_hex(&[byte])]
+                    .into_iter()
+                    .flatten()
+                    .collect()
+            } else {
+                vec![byte]
+            }
+        })
+        .flatten()
+        .collect();
+
+    let data = {
+        let size_hint = prefix.len() + escaped_user_data.len() + suffix.len();
+        let mut data = Vec::with_capacity(size_hint + 16);
+        data.extend_from_slice(prefix);
+        data.extend_from_slice(&escaped_user_data);
+        data.extend_from_slice(suffix);
+        pkcs7_pad(&data)
+    };
+
+    aes128_cbc_encrypt(&key, &iv, &data)
+}
+
+// helper function
+fn decrypt_user_data(ciphertext: &[u8]) -> Vec<u8> {
+    let mut rng = rand::rngs::StdRng::from_seed([29; 32]);
+    let key = rng.gen();
+    let iv = gen_twig(5..=23, &mut rng);
+    let raw = aes128_cbc_decrypt(&key, &iv, ciphertext);
+    pkcs7_unpad(&raw).unwrap()
+}
+
+#[test]
+fn test_user_data_is_escaped() {
+    let encrypted = encrypt_user_data(b";admin=true;");
+    let decrypted = decrypt_user_data(&encrypted);
+    assert_eq!(decrypted, b"comment1=cooking%20MCs;userdata=%3badmin%3dtrue%3b;comment2=%20like%20a%20pound%20of%20bacon");
+}
+
+fn check_is_admin(ciphertext: &[u8]) -> bool {
+    let decrypted = decrypt_user_data(ciphertext);
+    let s = String::from_utf8_lossy(&decrypted);
+    s.find(";admin=true;").is_some()
+}
+
+#[test]
+fn test_user_is_not_admin() {
+    let encrypted = encrypt_user_data(b";admin=true;");
+    assert_eq!(check_is_admin(&encrypted), false);
+}
+
+#[test]
+fn challange16() {
+    let plaintext = Vec::new(); // TODO:
+    let ciphertext = encrypt_user_data(&plaintext);
+    assert_eq!(check_is_admin(&ciphertext), true);
+}
