@@ -5,7 +5,7 @@ use rand::rngs::StdRng;
 use rand::{Rng, RngCore, SeedableRng};
 
 use crate::utils::{conversions::*, io::*, AsU128};
-use crate::{cbc::*, ecb::*};
+use crate::{cbc::*, ecb::*, xor::*};
 
 #[test]
 fn challange9() {
@@ -636,7 +636,107 @@ fn test_user_is_not_admin() {
 
 #[test]
 fn challange16() {
-    let plaintext = Vec::new(); // TODO:
-    let ciphertext = encrypt_user_data(&plaintext);
-    assert_eq!(check_is_admin(&ciphertext), true);
+    // BRIEF:
+    // The description is clear, if we flip two carefully positioned bits in the
+    // ciphertext, when decoding, the xor will flip two bits in the same
+    // relative positions the next block's decoded plaintext. All we need to do
+    // is find a close hamming distance replacement & bruteforce the padding.
+
+    // PART 1:
+    // To create the perfect replacement string, we shall acquire hamming
+    // distance neighbors of the restricted characters + their indices in our
+    // desired string.
+
+    let desired_plaintext = b";admin=true;";
+    let restricted_bytes = b";&=%";
+    let modifiers = restricted_bytes
+        .iter()
+        .map(|&byte| {
+            byte ^ (0x00..=0xff)
+                .filter(|x: &u8| x.is_ascii_alphanumeric()) // just to be sleek
+                .map(|replacement_byte| {
+                    (
+                        replacement_byte,
+                        hamming_distance(&[replacement_byte], &[byte]),
+                    )
+                })
+                .min_by_key(|&(_, distance)| distance)
+                .map(|(b, _)| b)
+                .unwrap()
+        })
+        .collect::<Vec<_>>();
+    let malicious_plaintext = desired_plaintext
+        .iter()
+        .map(|&byte| {
+            restricted_bytes
+                .iter()
+                .position(|&disallowed_byte| disallowed_byte == byte)
+                .map(|i| byte ^ modifiers[i])
+                .unwrap_or(byte)
+        })
+        .collect::<Vec<_>>();
+    let modifier = {
+        let mut xor_string = xor(&malicious_plaintext, desired_plaintext);
+        let pad_len = 16 - (xor_string.len() % 16);
+        xor_string.extend_from_slice(&b"A".repeat(pad_len));
+        xor_string
+    };
+
+    // PART 2:
+    // Unlike ECB we can't get the exact prefix len. We only need to know the
+    // last block's location though, and then we can bruteforce the exact
+    // padding.
+
+    let vulnerable_block_id = {
+        let cipher = encrypt_user_data(b"");
+        let cipher_extra_block = encrypt_user_data(&b"A".repeat(16));
+        assert_eq!(cipher_extra_block.len(), cipher.len() + 16);
+        cipher
+            .iter()
+            .zip(cipher_extra_block.iter())
+            .enumerate()
+            .step_by(16)
+            .map(|(i, _)| {
+                (
+                    cipher[i..i + 16].as_u128().unwrap(),
+                    cipher_extra_block[i..i + 16].as_u128().unwrap(),
+                )
+            })
+            .position(|(true_block, user_block)| true_block != user_block)
+            .unwrap()
+            .sub(1) // we want the block before the block we control
+    };
+
+    // PART 3:
+    // Now we need to bruteforce all possible paddings, attempting the attack
+    // for each one (applying the modifier at the specified location) until
+    // we're granted access
+
+    let modify_cipher = |ciphertext: Vec<u8>| {
+        let vulnerable_block = get_nth_block(&ciphertext, vulnerable_block_id).to_be_bytes();
+        let modified_block = xor(&vulnerable_block, &modifier);
+        ciphertext
+            .iter()
+            .enumerate()
+            .map(|(i, &byte)| {
+                if i < vulnerable_block_id * 16 || i >= (vulnerable_block_id + 1) * 16 {
+                    byte
+                } else {
+                    modified_block[i - vulnerable_block_id * 16]
+                }
+            })
+            .collect::<Vec<_>>()
+    };
+    let padding_len = (0..16)
+        .map(|i| b"A".repeat(i))
+        .map(|padding| [padding.as_slice(), &malicious_plaintext].concat())
+        .map(|plaintext| encrypt_user_data(&plaintext))
+        .map(modify_cipher)
+        .position(|ciphertext| check_is_admin(&ciphertext))
+        .unwrap();
+    let malicious_plaintext = [b"A".repeat(padding_len), malicious_plaintext].concat();
+    let ciphertext = encrypt_user_data(&malicious_plaintext);
+    let malicious_ciphertext = modify_cipher(ciphertext);
+
+    assert_eq!(check_is_admin(&malicious_ciphertext), true);
 }
