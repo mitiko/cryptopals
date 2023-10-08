@@ -72,7 +72,9 @@ fn detection_oracle(ciphertext: &[u8]) -> Mode {
     (0..ciphertext.len())
         .step_by(16)
         .map(|i| ciphertext[i..i + 16].as_u128().unwrap())
-        .for_each(|block| { set.insert(block); });
+        .for_each(|block| {
+            set.insert(block);
+        });
 
     if set.len() < ciphertext.len() / 16 {
         Mode::ECB
@@ -216,16 +218,18 @@ fn challange12() {
         let truth_cipher = ecb_random(&msg[..prefix_len]);
         let true_hash = get_nth_block(&truth_cipher, block_id);
 
-        let mut possible_bytes = Vec::new();
-        for byte in 0x00..=0xff {
-            msg.push(byte);
-            let search_cipher = ecb_random(&msg);
-            let search_hash = get_nth_block(&search_cipher, block_id);
-            if search_hash == true_hash {
-                possible_bytes.push(byte);
-            }
-            msg.pop();
-        }
+        let possible_bytes: Vec<_> = (0x00..=0xff)
+            .map(|byte| {
+                msg.push(byte);
+                let search_cipher = ecb_random(&msg);
+                let search_hash = get_nth_block(&search_cipher, block_id);
+                msg.pop();
+                (byte, search_hash)
+            })
+            .filter(|&(_, search_hash)| search_hash == true_hash)
+            .map(|(byte, _)| byte)
+            .collect();
+
         assert_eq!(possible_bytes.len(), 1);
         known_plaintext.push(possible_bytes[0]);
     }
@@ -520,7 +524,10 @@ fn test_affix_lens_detection() {
 #[test]
 fn challange14() {
     assert_eq!(detect_block_size(ecb_random_prefixed), 16);
-    assert_eq!(detection_oracle(&ecb_random_prefixed(&b"0".repeat(64))), Mode::ECB);
+    assert_eq!(
+        detection_oracle(&ecb_random_prefixed(&b"0".repeat(64))),
+        Mode::ECB
+    );
     let (prefix_len, suffix_len) = detect_affix_lens(ecb_random_prefixed);
     assert_eq!(prefix_len, 85); // consistent due to seed
     assert_eq!(suffix_len, 138); // secret length is 138
@@ -539,16 +546,18 @@ fn challange14() {
         let truth_cipher = ecb_random_prefixed(&msg[..(prefix_padding + fill_len)]);
         let true_hash = get_nth_block(&truth_cipher, block_id);
 
-        let mut possible_bytes = Vec::new();
-        for byte in 0x00..0xff {
-            msg.push(byte);
-            let search_cipher = ecb_random_prefixed(&msg);
-            let search_hash = get_nth_block(&search_cipher, block_id);
-            if search_hash == true_hash {
-                possible_bytes.push(byte);
-            }
-            msg.pop();
-        }
+        let possible_bytes: Vec<_> = (0x00..=0xff)
+            .map(|byte| {
+                msg.push(byte);
+                let search_cipher = ecb_random_prefixed(&msg);
+                let search_hash = get_nth_block(&search_cipher, block_id);
+                msg.pop();
+                (byte, search_hash)
+            })
+            .filter(|&(_, search_hash)| search_hash == true_hash)
+            .map(|(byte, _)| byte)
+            .collect();
+
         assert_eq!(possible_bytes.len(), 1);
         known_plaintext.push(possible_bytes[0]);
     }
