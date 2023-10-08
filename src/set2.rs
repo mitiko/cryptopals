@@ -96,16 +96,6 @@ fn challange11() {
     }
 }
 
-#[test]
-fn challange15() {
-    assert_eq!(
-        pkcs7_unpad(b"ICE ICE BABY\x04\x04\x04\x04"),
-        Some(b"ICE ICE BABY".to_vec())
-    );
-    assert_eq!(pkcs7_unpad(b"ICE ICE BABY\x05\x05\x05\x05"), None);
-    assert_eq!(pkcs7_unpad(b"ICE ICE BABY\x05\x04\x04\x04"), None);
-}
-
 const SECRET: &str = "
 Um9sbGluJyBpbiBteSA1LjAKV2l0aCBteSByYWctdG9wIGRvd24gc28gbXkg
 aGFpciBjYW4gYmxvdwpUaGUgZ2lybGllcyBvbiBzdGFuZGJ5IHdhdmluZyBq
@@ -563,4 +553,14 @@ fn challange14() {
     }
 
     assert_eq!(known_plaintext, base64_to_raw(SECRET));
+}
+
+#[test]
+fn challange15() {
+    assert_eq!(
+        pkcs7_unpad(b"ICE ICE BABY\x04\x04\x04\x04"),
+        Some(b"ICE ICE BABY".to_vec())
+    );
+    assert_eq!(pkcs7_unpad(b"ICE ICE BABY\x05\x05\x05\x05"), None);
+    assert_eq!(pkcs7_unpad(b"ICE ICE BABY\x05\x04\x04\x04"), None);
 }
