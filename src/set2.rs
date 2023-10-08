@@ -411,11 +411,11 @@ where
     // ^^ Notice how we have 2 common prefix blocks instead of 1.
     // Another assumption is that our fill-in string isn't the prefix or suffix.
     // If we wanted to be completely accurate, we would have to repeat the
-    // experiment with at least 4 different filler bytes but for simplicity
+    // experiment with at least 3 different filler bytes but for simplicity
     // let's just assume the secret isn't just a blob of As.
-    // Why 4 you ask? Well, with 3 if the prefix is 17 As and the suffix is
-    // 17 Bs, we'd get 3 different results for As, Bs, Cs as fillers. We'd need
-    // a forth tie-breaker. Then we choose the duplicate result.
+    // Why 3 you ask? Well, with 2 if the prefix is 17 As we'd get 2 different
+    // results for As, Bs as fillers. We'd need a third tie-breaker. Then we
+    // choose the duplicate result.
 
     let cipher = insecure_fn(&b"A".repeat(combined_rem));
     let cipher_extra_block = insecure_fn(&b"A".repeat(combined_rem + 16));
@@ -570,7 +570,7 @@ fn encrypt_user_data(user_data: &[u8]) -> Vec<u8> {
     // only for consistency (not actually required to use a seed)
     let mut rng = rand::rngs::StdRng::from_seed([29; 32]);
     let key = rng.gen();
-    let iv = gen_twig(5..=23, &mut rng);
+    let iv: [u8; 16] = rng.gen();
 
     let prefix = b"comment1=cooking%20MCs;userdata=";
     let suffix = b";comment2=%20like%20a%20pound%20of%20bacon";
@@ -606,7 +606,7 @@ fn encrypt_user_data(user_data: &[u8]) -> Vec<u8> {
 fn decrypt_user_data(ciphertext: &[u8]) -> Vec<u8> {
     let mut rng = rand::rngs::StdRng::from_seed([29; 32]);
     let key = rng.gen();
-    let iv = gen_twig(5..=23, &mut rng);
+    let iv: [u8; 16] = rng.gen();
     let raw = aes128_cbc_decrypt(&key, &iv, ciphertext);
     pkcs7_unpad(&raw).unwrap()
 }
