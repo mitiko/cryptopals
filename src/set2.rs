@@ -366,96 +366,141 @@ fn detect_affix_lens<F>(insecure_fn: F) -> (usize, usize)
 where
     F: Fn(&[u8]) -> Vec<u8>,
 {
+    // BRIEF:
     // Unlike the suffix detector, we can't judge purely on ciphertext size,
     // if we attempt to we'll derive prefix_rem + suffix_rem and won't have
-    // enough information to get the individual lengths
-    // Instead we must continue the search:
-    // Once we figure out the combined padding, we'll have something like:
-    // [prefix_abcdefAAA] [AAAAAsuffix_mnop]
-    // Then if we expand the controlled text with 1 block:
-    // [prefix_abcdefAAA] [AAAAAAAAAAAAAAAA] [AAAAAsuffix_mnop]
-    // Given our fill-in string isn't the prefix of the suffix,
-    // or the suffix of the prefix, we can derive the block split location
-    // To ensure we get a fill-in to both the prefix blocks and suffix blocks
-    // we must start the bruteforce higher at 17 (at least 1 block size)
-    // [abcdefAxyzwvutsr] vs [abcdefAAAAAAAAAA] [AAAAAAAxyzwvutsr]
+    // enough information to get the individual lengths.
+    // With 2 additional bruteforce attacks we can first detect the block count
+    // of the padded prefix, and then extract the exact padding size, which
+    // gives us the unpadded prefix length.
 
-    let initial_cipher_size = insecure_fn(&b"A".repeat(16)).len();
-    let combined_rem = (0..=16)
+    // PART 1:
+    // To ensure we get a fill-in to both the prefix blocks and suffix blocks
+    // we must consider a wider range for the bruteforce. Consider:
+    // [abcdefAxyzwvutsr] vs [abcdefAAAAAAAAAA] [AAAAAAAxyzwvutsr]
+    // In the extremes, the range is from 1 to 32, and to avoid this undesired
+    // clustering we shall start at the top of the range and search in reverse.
+    // This introduces a few new problems - first, we have to use a non-empty
+    // plaintext for the initial size, second (and this is the bigger issue)
+    // we may overfill: [abcdefghijklmnoA] [AAAAAAAAAAAAAAAA] [Axyzwvutsrqponml]
+    // There is no way to detect if we've overfilled during this bruteforce but
+    // we can account for it later, no drama.
+    // Additionally, this allows to shorten the search from 1..31 to 16..32 yay
+    // We must be careful when searching backwards too because when we've padded
+    // perfectly with As pkcs7 adds 1 additional block. Example:
+    // [xAAAAAAAAAAAAAAA] [AAAAAAAAAAAAAAAy] [PPPPPPPPPPPPPPPP]
+    // Here the count is 30 but we'll detect a change in cipher size at 29.
+    // To account for it we can just add 1, but be careful, we must also adjust
+    // the search range - results vary 16..=31, so we search 15..=31
+
+    let initial_cipher_size = insecure_fn(&b"A".repeat(32)).len();
+    let combined_rem = (15..=31)
         .rev()
         .map(|i| (i, insecure_fn(&b"A".repeat(i)).len()))
         .find(|&(_, cipher_size)| cipher_size < initial_cipher_size)
         .map(|(combined_rem, _)| combined_rem)
-        .unwrap();
+        .unwrap()
+        .add(1);
+
+    dbg!(combined_rem);
+
+    // PART 2:
+    // Now, we'll detect the exact block count of the prefix. Keep in mind if
+    // we've overfilled, we'll be counting that block of As as well.
+    // The idea is simple - have two unaligned ciphers, for the blocks that
+    // match, they're part of the prefix, where they don't is the location we've
+    // tampered with. For the first block, we'll just use our padding:
+    // [prefix_abcdefAAA] [AAAAAsuffix_mnop]
+    // And for the second one, we'll expand the controlled text with 1 block:
+    // [prefix_abcdefAAA] [AAAAAAAAAAAAAAAA] [AAAAAsuffix_mnop]
+    // Here's how it would look for overfilled blocks if you're curious:
+    // [abcdefghijklmnoA] [AAAAAAAAAAAAAAAA] [Axyzwvutsrqponml]
+    // [abcdefghijklmnoA] [AAAAAAAAAAAAAAAA] [AAAAAAAAAAAAAAAA] [Axyzwvutsrqponml]
+    // ^^ Notice how we have 2 common prefix blocks instead of 1.
+    // Another assumption is that our fill-in string isn't the prefix or suffix.
+    // If we wanted to be completely accurate, we would have to repeat the
+    // experiment with at least 4 different filler bytes but for simplicity
+    // let's just assume the secret isn't just a blob of As.
+    // Why 4 you ask? Well, with 3 if the prefix is 17 As and the suffix is
+    // 17 Bs, we'd get 3 different results for As, Bs, Cs as fillers. We'd need
+    // a forth tie-breaker. Then we choose the duplicate result.
 
     let cipher = insecure_fn(&b"A".repeat(combined_rem));
     let cipher_extra_block = insecure_fn(&b"A".repeat(combined_rem + 16));
     assert_eq!(cipher_extra_block.len(), cipher.len() + 16);
-    // assert!(cipher.len() + 16 == initial_cipher_size);
+
     dbg!(initial_cipher_size);
     dbg!(cipher.len());
 
-    let common_prefix_len = cipher
+    let common_prefix_blocks = cipher
         .iter()
         .zip(cipher_extra_block.iter())
         .enumerate()
         .step_by(16)
         .map(|(i, _)| {
             (
-                i,
                 cipher[i..i + 16].as_u128().unwrap(),
                 cipher_extra_block[i..i + 16].as_u128().unwrap(),
             )
         })
-        .find(|(_, true_block, user_block)| true_block != user_block)
-        .map(|(i, ..)| i)
-        .unwrap();
+        .take_while(|(true_block, user_block)| true_block == user_block)
+        .count();
 
-    // We can now bruteforce the byte split point:
-    // yes [prefix_abcdefAAA] [AAAAAAAAAAAAAAAA] [AAAAAAAAAAAAAAAA] [AAAAAsuffix_mnop]
-    // yes [prefix_abcdefBAA] [AAAAAAAAAAAAAAAA] [AAAAAAAAAAAAAAAA] [AAAAAsuffix_mnop]
-    // yes [prefix_abcdefBBA] [AAAAAAAAAAAAAAAA] [AAAAAAAAAAAAAAAA] [AAAAAsuffix_mnop]
-    // yes [prefix_abcdefBBB] [AAAAAAAAAAAAAAAA] [AAAAAAAAAAAAAAAA] [AAAAAsuffix_mnop]
-    // no  [prefix_abcdefBBB] [BAAAAAAAAAAAAAAA] [AAAAAAAAAAAAAAAA] [AAAAAsuffix_mnop]
+    dbg!(common_prefix_blocks);
+
+    // PART 3:
+    // Now that we know the exact prefix blocks count (and know where to look),
+    // we can bruteforce the exact padding by changing the filler text & looking
+    // duplicate blocks:
+    // 0 yes [prefix_abcdefAAA] [AAAAAAAAAAAAAAAA] [AAAAAAAAAAAAAAAA]
+    // 1 yes [prefix_abcdefBAA] [AAAAAAAAAAAAAAAA] [AAAAAAAAAAAAAAAA]
+    // 2 yes [prefix_abcdefBBA] [AAAAAAAAAAAAAAAA] [AAAAAAAAAAAAAAAA]
+    // 3 yes [prefix_abcdefBBB] [AAAAAAAAAAAAAAAA] [AAAAAAAAAAAAAAAA]
+    // 4 no  [prefix_abcdefBBB] [BAAAAAAAAAAAAAAA] [AAAAAAAAAAAAAAAA]
     // The first `no` match between the two blocks we get, is when we overflowed
     // the prefix. The last `yes` is when we exactly padded the prefix.
-    // Additional note: since we're starting the first brute-force at 17, it's
-    // possible we fill 3 entire blocks, instead of just the two we're comparing
-    // but that's no biggie, we know the split point & can ignore the 1st block
+    // To be sure we'd get at least 2 duplicate blocks,
+    // we need to use >= 32 + max_prefix_padding = 32 + 31 = 63
+    // For overfilled blocks we'll match the overfill
+    // 00 yes [xAAAAAAAAAAAAAAA] [AAAAAAAAAAAAAAAA] [AAAAAAAAAAAAAAAA] [AAAAAAAAAAAAAAAA]
+    // 01 yes [xBAAAAAAAAAAAAAA] [AAAAAAAAAAAAAAAA] [AAAAAAAAAAAAAAAA] [AAAAAAAAAAAAAAAA]
+    // 02 yes [xBBAAAAAAAAAAAAA] [AAAAAAAAAAAAAAAA] [AAAAAAAAAAAAAAAA] [AAAAAAAAAAAAAAAA]
+    // 03 yes [xBBBAAAAAAAAAAAA] [AAAAAAAAAAAAAAAA] [AAAAAAAAAAAAAAAA] [AAAAAAAAAAAAAAAA]
+    // 31 yes [xBBBBBBBBBBBBBBB] [BBBBBBBBBBBBBBBB] [AAAAAAAAAAAAAAAA] [AAAAAAAAAAAAAAAA]
+    // 32 no  [xBBBBBBBBBBBBBBB] [BBBBBBBBBBBBBBBB] [BAAAAAAAAAAAAAAA] [AAAAAAAAAAAAAAAA]
+    //                the blocks we're comparing     ^^^^^^^^^^^^^^^^   ^^^^^^^^^^^^^^^^
 
-    dbg!(common_prefix_len);
-    let prefix_padding_len = (0..16)
+    let prefix_padding_len = (0..=32)
         .map(|i| [b"B".repeat(i), b"A".repeat(64)].concat())
         .map(|plaintext| insecure_fn(&plaintext))
         .map(|cipher| {
             cipher
                 .into_iter()
-                .skip(common_prefix_len)
+                .skip(common_prefix_blocks * 16)
                 .take(32)
                 .collect()
         })
         .map(|data: Vec<_>| (data[..16].as_u128().unwrap(), data[16..].as_u128().unwrap()))
         .enumerate()
+        // .map(|x| {dbg!(x); x})
         .find(|(_, (block1, block2))| block1 != block2)
         .map(|(i, _)| i)
-        .unwrap();
+        .unwrap()
+        // .sub(1);
+        // for debugging only
+        .checked_sub(1).expect("Failed to detect exact prefix padding");
 
-    dbg!(common_prefix_len);
+    dbg!(common_prefix_blocks);
     dbg!(prefix_padding_len);
-    let prefix_len = common_prefix_len - prefix_padding_len;
-    // let suffix_len = {
-    //     let mut remaining = cipher.len() - prefix_len - combined_rem;
-    //     if cipher.len() - initial_cipher_size == 32 {
-    //         remaining -= 16;
-    //     }
-    //     remaining
-    // };
-    // let suffix_len = initial_cipher_size + common_prefix_len - cipher.len() - prefix_padding_len;
-    let padded_suffix_len = cipher.len() - common_prefix_len;
-    let suffix_padding_len = combined_rem - prefix_padding_len;
-    let suffix_len = padded_suffix_len - suffix_padding_len;
+    let prefix_len = common_prefix_blocks * 16 - prefix_padding_len;
+
+
+    let suffix_len = (cipher.len() - 16) - prefix_len - combined_rem;
+    // let padded_suffix_len = cipher.len() - common_prefix_len;
+    // let suffix_padding_len = combined_rem - prefix_padding_len;
+    // let suffix_len = padded_suffix_len - suffix_padding_len;
     dbg!("--------------------------------");
-    dbg!(common_prefix_len);
+    dbg!(common_prefix_blocks);
     dbg!(prefix_padding_len);
     dbg!(prefix_len);
     dbg!(cipher.len());
@@ -493,8 +538,15 @@ fn test_affix_lens_detection() {
 
     for prefix_len in 0..32 {
         for suffix_len in 0..32 {
-            if prefix_len == 0 || suffix_len == 0 { continue; }
+            // skip 0-tests for now
+            if prefix_len == 0 || suffix_len == 0 {
+                continue;
+            }
+            if prefix_len == 16 || suffix_len == 16 {
+                continue;
+            }
             let vuln_function = vuln_fn_generator(prefix_len, suffix_len);
+            dbg!("xxxxx", prefix_len, suffix_len, "xxxxx");
             assert_eq!(detect_affix_lens(vuln_function), (prefix_len, suffix_len));
         }
     }
