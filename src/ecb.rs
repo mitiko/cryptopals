@@ -21,11 +21,9 @@ pub fn pkcs7_pad(data: &[u8]) -> Vec<u8> {
 pub fn pkcs7_unpad(data: &[u8]) -> Option<Vec<u8>> {
     if data.len() % 16 != 0 { return None; }
     let pad_byte = data.last().unwrap_or(&0xff).to_owned();
-    dbg!(pad_byte);
-    if pad_byte >= 0x10 { return None; }
+    if pad_byte > 0x10 { return None; }
     let pad_start = data.len() - usize::from(pad_byte);
     let unpadded = data[pad_start..].to_vec();
-    dbg!(unpadded.len(), pad_start, data.len());
     if unpadded.iter().all(|&byte| byte == pad_byte)
     { Some(data[..pad_start].to_vec()) } else { None }
 }

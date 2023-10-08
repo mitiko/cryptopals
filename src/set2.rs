@@ -563,6 +563,10 @@ fn challange15() {
     );
     assert_eq!(pkcs7_unpad(b"ICE ICE BABY\x05\x05\x05\x05"), None);
     assert_eq!(pkcs7_unpad(b"ICE ICE BABY\x05\x04\x04\x04"), None);
+    assert_eq!(
+        pkcs7_unpad(&pkcs7_pad(&b"A".repeat(16))),
+        Some(b"A".repeat(16))
+    );
 }
 
 // vulnerable function
