@@ -14,6 +14,9 @@ mod set1;
 #[cfg(test)]
 mod set2;
 
+#[cfg(test)]
+mod set3;
+
 fn main() {
     println!("Run tests with `cargo test -- --nocapture`");
 }
