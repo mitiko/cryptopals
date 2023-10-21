@@ -25,6 +25,16 @@ fn pkcs7_auto() {
 }
 
 #[test]
+fn pcks7_unpad_test() {
+    assert_eq!(pkcs7_unpad(b"YELLOW SUBMARIN\x01"), Some(b"YELLOW SUBMARIN".to_vec()));
+    assert_eq!(pkcs7_unpad(b"YELLOW SUBMARI\x02\x02"), Some(b"YELLOW SUBMARI".to_vec()));
+    assert_eq!(pkcs7_unpad(b"YELLOW SUBMAR\x03\x03\x03"), Some(b"YELLOW SUBMAR".to_vec()));
+    assert_eq!(pkcs7_unpad(b"YELLOW SUBMAR\x01\x01\x01"), Some(b"YELLOW SUBMAR\x01\x01".to_vec()));
+    assert_eq!(pkcs7_unpad(b"YELLOW SUBMARIN\x03\x03"), None);
+    assert_eq!(pkcs7_unpad(b"YELLOW SUBMARIN\x00"), None);
+}
+
+#[test]
 fn aes128_cbc_encrypt_matches_openssl() {
     let data = pkcs7_pad(b"Lorem ipsum dolor sit amet, consectetur adipiscing elit.");
     let key = b"YELLOW SUBMARINE";
