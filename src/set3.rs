@@ -1,15 +1,20 @@
 use crate::{cbc::*, ecb::*, utils::io::*};
+use lazy_static::lazy_static;
 use rand::{Rng, SeedableRng};
 
-fn server_encrypt() -> Vec<u8> {
-    let strings = read_base64_lines("data/set3/challange17.txt");
-    assert!(strings.len() == 10);
+lazy_static! {
+    static ref COOKIES: Vec<Vec<u8>> = {
+        let lines = read_base64_lines("data/set3/challange17.txt");
+        assert!(lines.len() == 10);
+        lines
+    };
+}
 
+fn server_encrypt(data: &[u8]) -> Vec<u8> {
     let mut rng = rand::rngs::StdRng::from_seed([57; 32]);
     let key = rng.gen();
     let iv: [u8; 16] = rng.gen();
-    let plaintext = &strings[rng.gen_range(0..10)];
-    let padded = pkcs7_pad(&plaintext);
+    let padded = pkcs7_pad(data);
     let ciphertext_data = aes128_cbc_encrypt(&key, &iv, &padded);
     [iv.to_vec(), ciphertext_data].concat()
 }
@@ -36,15 +41,16 @@ fn crack_last_block(ciphertext: &[u8]) -> Vec<u8> {
         ciphertext.len() >= 32,
         "At least 2 blocks are required to crack the last one"
     );
-    let mut plaintext = Vec::new(); // this is actually the block in reverse
+    // Note: plaintext block is stored in reverse
+    let mut plaintext = Vec::with_capacity(16);
     let mut mutated_ciphertext = ciphertext.to_owned();
     let n = ciphertext.len();
     // We'll crack/decipher plaintext from the last block one byte at a time
     // at most we're doing 256 checks per byte => 2^8 * 2^4 = 2^12 <<< 2^128
     // Additionally, exploiting English's letter frequency table, average checks
     // per byte can be lowered to probably well below 128, effectively halved
-    // First we'll start by eating as much of the already setup
 
+    // First we'll start by eating as much of the already setup padding:
     if leak_padding_error(&mutated_ciphertext) {
         let pad = (1..=16)
             .rev()
@@ -63,14 +69,14 @@ fn crack_last_block(ciphertext: &[u8]) -> Vec<u8> {
         // The invariant for each iteration of the loops is that the mutated
         // ciphertexts has been altered to make the last x known bytes of the
         // plaintext the padding byte x (1 <= x < 16)
-        // For the next iteration we'll modify the last x bytes to be the
-        // padding byte x + 1 and bruteforce guess the previous byte in the last
-        // block of plaintext.
         let known_bytes = plaintext.len();
         let padding_byte = u8::try_from(known_bytes).unwrap() + 1;
         // We're attacking the (x + 1)-st byte back from the end
         let idx = ciphertext.len() - (known_bytes + 1) - 16;
 
+        // For the next iteration we'll modify the last x bytes to be the
+        // padding byte x + 1 and bruteforce guess the previous byte in the last
+        // block of plaintext
         let modifier_byte = padding_byte ^ (padding_byte - 1);
         mutated_ciphertext
             .iter_mut()
@@ -78,23 +84,13 @@ fn crack_last_block(ciphertext: &[u8]) -> Vec<u8> {
             .take(plaintext.len())
             .for_each(|x| *x ^= modifier_byte);
 
-        // let last_bytes: Vec<_> = decrypt(&mutated_ciphertext)
-        //     .into_iter()
-        //     .rev()
-        //     .take(16)
-        //     .rev()
-        //     .collect();
-        // dbg!(&last_bytes);
-        // // assert!(false);
-
-        dbg!(padding_byte);
-        dbg!(plaintext.len());
-
+        // Bruteforce the modifier byte which sets our desired padding
         let byte = (0x00..=0xff)
             .find(|byte| {
                 mutated_ciphertext[idx] ^= byte;
                 let mut is_padded = leak_padding_error(&mutated_ciphertext);
-                mutated_ciphertext[idx] ^= byte;
+                mutated_ciphertext[idx] ^= byte; // undo xor to restore state
+
                 // Double check that if we're cracking the last byte, the
                 // matched plaintext is 0x01, not 0x02 or 0x03
                 // (with previous plaintext interfering)
@@ -109,48 +105,34 @@ fn crack_last_block(ciphertext: &[u8]) -> Vec<u8> {
             })
             .unwrap();
 
-        dbg!(byte);
-        mutated_ciphertext[idx] ^= byte;
-        let last_bytes: Vec<_> = decrypt(&mutated_ciphertext)
-            .into_iter()
-            .rev()
-            .take(16)
-            .rev()
-            .collect();
-        dbg!(&last_bytes);
+        // plaintext_unknown ^ byte = padding
+        // plaintext_unknown = plaintext_unknown ^ byte ^ byte = padding ^ byte
         plaintext.push(byte ^ padding_byte);
+        // Do the modification to keep invariant for next iteration of loop
+        mutated_ciphertext[idx] ^= byte;
     }
 
     plaintext.reverse();
     plaintext
 }
 
+fn crack_cbc(mut ciphertext: &[u8]) -> Vec<u8> {
+    let mut plaintext = Vec::with_capacity(ciphertext.len() - 16);
+    while ciphertext.len() >= 32 {
+        let cracked_block = crack_last_block(&ciphertext);
+        plaintext.extend(cracked_block.iter().rev());
+        ciphertext = &ciphertext[..ciphertext.len() - 16];
+    }
+    plaintext.reverse();
+    pkcs7_unpad(&plaintext).unwrap()
+}
+
 #[test]
 fn challange17() {
-    let ciphertext = server_encrypt();
-    assert_eq!(leak_padding_error(&ciphertext), true);
-    dbg!("before");
-    let pl = crack_last_block(&ciphertext);
-    // dbg!("after");
-    let st = String::from_utf8_lossy(&pl);
-    dbg!(st);
-    dbg!(pl.len());
-    dbg!(pl);
-    dbg!(&ciphertext);
-    let pl = crack_last_block(&ciphertext[..ciphertext.len() - 16]);
-    let st = String::from_utf8_lossy(&pl);
-    dbg!(st);
-    // dbg!(pl.len());
-    dbg!(pl);
-    // assert!(false);
-
-    // let n = ciphertext.len();
-    // let mut v = Vec::new();
-    // for byte in 0..=0xff {
-    //     let mut mutatated_ciphertext = ciphertext.clone();
-    //     mutatated_ciphertext[n - 1] ^= byte;
-    //     if leak_padding_error(&mutatated_ciphertext) {
-    //         v.push(byte);
-    //     }
-    // }
+    for cookie_id in 0..10 {
+        let data = &COOKIES[cookie_id];
+        let ciphertext = server_encrypt(data);
+        let plaintext = crack_cbc(&ciphertext);
+        assert_eq!(data, &plaintext);
+    }
 }
