@@ -9,3 +9,9 @@ I stumbled across this accidentally on my GitHub explore page when
 [@enncoded](https://github.com/enncoded) and I saw they had some rust projects,
 amongst which a try at cryptopals.  
 So I got inspired. Let's write some crypto.
+
+
+### TODO
+
+-> cleanup utils
+-> remove data/decoded references

@@ -2,6 +2,7 @@
 
 pub mod cbc;
 pub mod ecb;
+pub mod ctr;
 pub mod utils;
 pub mod xor;
 

@@ -12,6 +12,15 @@ pub fn pkcs7_pad_to(to_size: usize, data: &[u8]) -> Vec<u8> {
     output
 }
 
+/// Pads the data buffer to a multiple of 16 by appending 0s at the end.
+/// Allocates, so use for small 1-2 blocks of data.
+pub fn zero_pad(data: &[u8]) -> Vec<u8> {
+    let rem = 16 - (data.len() % 16);
+    let mut output = data.to_vec();
+    output.extend([0].iter().cycle().take(rem));
+    output
+}
+
 /// Pads to a block size of 16
 pub fn pkcs7_pad(data: &[u8]) -> Vec<u8> {
     let rem = 16 - (data.len() % 16);

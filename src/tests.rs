@@ -1,4 +1,6 @@
-use crate::{ecb::*, cbc::*};
+use openssl::cipher;
+
+use crate::{cbc::*, ctr::{aes128_ctr_encrypt, aes128_ctr_iteration}, ecb::*, utils::conversions::raw_to_hex};
 
 #[test]
 fn aes128_ecb_encrypt_decrypt() {
@@ -52,4 +54,30 @@ fn aes128_cbc_encrypt_decrypt() {
     let iv = b"\x00\x00\x00";
     let ciphertext = aes128_cbc_encrypt(key, iv, &data);
     assert_eq!(aes128_cbc_decrypt(key, iv, &ciphertext), data);
+}
+
+#[test]
+fn aes128_ctr_single_iteration() {
+    let data = b"YELLOW SUBMARINE";
+    let (nonce, counter) = (3 << 32, 1);
+    let ciphertext = aes128_ctr_iteration(data, nonce, counter);
+    assert_eq!(raw_to_hex(&ciphertext), b"e31586e966489ee7798d973b8abc013");
+
+    let data = b"YELLOW SUBMA";
+    let ciphertext = aes128_ctr_iteration(data, nonce, counter);
+    assert_eq!(raw_to_hex(&ciphertext), b"4fc4b37bc4adddd870a144a8");
+}
+
+#[test]
+#[should_panic]
+fn aes128_ctr_single_iteration_large() {
+    aes128_ctr_iteration(b"0123456789abcdefX", 0, 0);
+}
+
+#[test]
+fn aes128_ctr_multi_iteration() {
+    let data = b"YELLOW SUBMARINE AND MORE";
+    let (nonce, counter) = (3 << 32, 33);
+    let ciphertext = aes128_ctr_encrypt(data, nonce, counter);
+    assert_eq!(raw_to_hex(&ciphertext), b"8c246596274686eda0d039e6ad2f1f3763d32ebac2d3318");
 }
