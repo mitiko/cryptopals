@@ -1,6 +1,4 @@
-use openssl::cipher;
-
-use crate::{cbc::*, ctr::{aes128_ctr_encrypt, aes128_ctr_iteration}, ecb::*, utils::conversions::raw_to_hex};
+use crate::{cbc::*, ctr::{aes128_ctr_decrypt, aes128_ctr_encrypt, aes128_ctr_iteration}, ecb::*, utils::conversions::raw_to_hex};
 
 #[test]
 fn aes128_ecb_encrypt_decrypt() {
@@ -58,26 +56,38 @@ fn aes128_cbc_encrypt_decrypt() {
 
 #[test]
 fn aes128_ctr_single_iteration() {
-    let data = b"YELLOW SUBMARINE";
+    let key = b"YELLOW SUBMARINE";
     let (nonce, counter) = (3 << 32, 1);
-    let ciphertext = aes128_ctr_iteration(data, nonce, counter);
-    assert_eq!(raw_to_hex(&ciphertext), b"e31586e966489ee7798d973b8abc013");
+    let data = b"Lorem ipsum dolo";
+    let ciphertext = aes128_ctr_iteration(data, key, nonce, counter);
+    assert_eq!(raw_to_hex(&ciphertext), b"1070a4d8142593df4fa3ada7901c98a7");
 
-    let data = b"YELLOW SUBMA";
-    let ciphertext = aes128_ctr_iteration(data, nonce, counter);
-    assert_eq!(raw_to_hex(&ciphertext), b"4fc4b37bc4adddd870a144a8");
+    let data = b"Lorem ipsum";
+    let ciphertext = aes128_ctr_iteration(data, key, nonce, counter);
+    assert_eq!(raw_to_hex(&ciphertext), b"1070a4d8142593df4fa3ad");
 }
 
 #[test]
 #[should_panic]
 fn aes128_ctr_single_iteration_large() {
-    aes128_ctr_iteration(b"0123456789abcdefX", 0, 0);
+    // over 16 bytes in one iteration panics
+    aes128_ctr_iteration(b"0123456789abcdefX", b"YELLOW SUBMARINE", 0, 0);
 }
 
 #[test]
 fn aes128_ctr_multi_iteration() {
-    let data = b"YELLOW SUBMARINE AND MORE";
+    let key = b"YELLOW SUBMARINE";
+    let data = b"Lorem ipsum dolor sit amet";
     let (nonce, counter) = (3 << 32, 33);
-    let ciphertext = aes128_ctr_encrypt(data, nonce, counter);
-    assert_eq!(raw_to_hex(&ciphertext), b"8c246596274686eda0d039e6ad2f1f3763d32ebac2d3318");
+    let ciphertext = aes128_ctr_encrypt(data, key, nonce, counter);
+    assert_eq!(raw_to_hex(&ciphertext), b"cd5e958ee26928926bd28c8e105b9917c16b495a880e372726d");
+}
+
+#[test]
+fn aes128_ctr_multi_decrypt() {
+    let key = b"YELLOW SUBMARINE";
+    let data = b"Lorem ipsum dolor sit amet";
+    let (nonce, counter) = (3 << 32, 33);
+    let ciphertext = aes128_ctr_encrypt(data, key, nonce, counter);
+    assert_eq!(aes128_ctr_decrypt(&ciphertext, key, nonce, counter), data);
 }
