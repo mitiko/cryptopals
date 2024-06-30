@@ -86,7 +86,7 @@ fn aes128_ctr_multi_iteration() {
 #[test]
 fn aes128_ctr_multi_decrypt() {
     let key = b"YELLOW SUBMARINE";
-    let data = b"Lorem ipsum dolor sit amet";
+    let data = b"Lorem ipsum dolor sit amet, consectetur adipiscing elit.";
     let (nonce, counter) = (3 << 32, 33);
     let ciphertext = aes128_ctr_encrypt(data, key, nonce, counter);
     assert_eq!(aes128_ctr_decrypt(&ciphertext, key, nonce, counter), data);

@@ -104,11 +104,7 @@ YnkK";
 
 // vulnerable function
 fn ecb_random(plaintext: &[u8]) -> Vec<u8> {
-    // only for consistency (not actually required to use a seed)
-    let mut rng = rand::rngs::StdRng::from_seed([57; 32]);
-
-    // random key
-    let key = rng.gen();
+    let key = rand::rngs::StdRng::from_seed([57; 32]).gen();
     let suffix = base64_to_raw(SECRET);
 
     let data = {
@@ -158,10 +154,7 @@ where
 fn test_suffix_len_detection() {
     let vuln_fn_generator = |suffix_len: usize| {
         move |plaintext: &[u8]| {
-            let mut rng = rand::rngs::StdRng::from_seed([57; 32]);
-
-            // random key
-            let key = rng.gen();
+            let key = rand::rngs::StdRng::from_seed([57; 32]).gen();
             let suffix = b"A".repeat(suffix_len);
 
             let data = {

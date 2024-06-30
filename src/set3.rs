@@ -1,4 +1,4 @@
-use crate::{cbc::*, ecb::*, utils::io::*};
+use crate::{cbc::*, ctr::aes128_ctr_decrypt, ecb::*, utils::{conversions::base64_to_raw, io::*}};
 use lazy_static::lazy_static;
 use rand::{Rng, SeedableRng};
 
@@ -58,7 +58,7 @@ fn crack_last_block(ciphertext: &[u8]) -> Vec<u8> {
                 let idx = n - usize::from(guess_pad) - 16;
                 mutated_ciphertext[idx] ^= 0x01;
                 let is_padded = leak_padding_error(&mutated_ciphertext);
-                mutated_ciphertext[idx] ^= 0x01;
+                mutated_ciphertext[idx] ^= 0x01; // undo xor to restore state
                 !is_padded
             })
             .unwrap();
@@ -98,7 +98,7 @@ fn crack_last_block(ciphertext: &[u8]) -> Vec<u8> {
                     mutated_ciphertext[idx] ^= byte;
                     mutated_ciphertext[idx - 1] ^= 0x01;
                     is_padded = leak_padding_error(&mutated_ciphertext);
-                    mutated_ciphertext[idx - 1] ^= 0x01;
+                    mutated_ciphertext[idx - 1] ^= 0x01; // undo xor to restore state
                     mutated_ciphertext[idx] ^= byte;
                 }
                 is_padded
@@ -135,4 +135,12 @@ fn challange17() {
         let plaintext = crack_cbc(&ciphertext);
         assert_eq!(data, &plaintext);
     }
+}
+
+#[test]
+fn challange18() {
+    let ciphertext = base64_to_raw("L77na/nrFsKvynd6HzOoG7GHTLXsTVu9qvY/2syLXzhPweyyMTJULu/6/kXX0KSvoOLSFQ==");
+    let key = b"YELLOW SUBMARINE";
+    let plaintext = aes128_ctr_decrypt(&ciphertext, key, 0, 0);
+    assert!(String::from_utf8_lossy(&plaintext).contains("Ice, Ice, baby"));
 }
