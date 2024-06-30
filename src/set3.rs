@@ -2,8 +2,9 @@ use crate::{
     cbc::*,
     ctr::{aes128_ctr_decrypt, aes128_ctr_encrypt},
     ecb::*,
-    set1::xor_cross_entropy_analysis,
+    set1::{break_rep_xor, xor_cross_entropy_analysis},
     utils::{conversions::base64_to_raw, io::*},
+    xor::xor_rep,
 };
 use lazy_static::lazy_static;
 use rand::{Rng, SeedableRng};
@@ -156,7 +157,10 @@ fn challange18() {
 fn challange19() {
     let plaintexts = read_base64_lines("data/set3/challenge19.txt");
     let key = rand::rngs::StdRng::from_seed([57; 32]).gen();
-    let ciphertexts: Vec<_> = plaintexts.iter().map(|p| aes128_ctr_encrypt(&p, &key, 0, 0)).collect();
+    let ciphertexts: Vec<_> = plaintexts
+        .iter()
+        .map(|p| aes128_ctr_encrypt(&p, &key, 0, 0))
+        .collect();
 
     let mut decoded = vec![Vec::new(); ciphertexts.len()];
     let len = ciphertexts.iter().map(|c| c.len()).max().unwrap();
@@ -175,5 +179,31 @@ fn challange19() {
     }
     assert!(String::from_utf8_lossy(&decoded[5]).contains("polite meaningless words"));
     assert!(String::from_utf8_lossy(&decoded[34]).contains("yet I number him in the song"));
+    // doesn't decode all the way correctly but gets the bulk of the job done
+}
+
+#[test]
+fn challange20() {
+    let plaintexts = read_base64_lines("data/set3/challenge20.txt");
+    let key = rand::rngs::StdRng::from_seed([57; 32]).gen();
+    let ciphertexts: Vec<_> = plaintexts
+        .iter()
+        .map(|p| aes128_ctr_encrypt(&p, &key, 0, 0))
+        .collect();
+
+    let len = ciphertexts.iter().map(|c| c.len()).min().unwrap();
+    let mut long_cipher: Vec<u8> = Vec::with_capacity(len * ciphertexts.len());
+    for ciphertext in ciphertexts {
+        long_cipher.extend(&ciphertext[..len]);
+    }
+
+    let key = break_rep_xor(&long_cipher);
+    let long_plain = xor_rep(&long_cipher, &key);
+    let decoded: Vec<_> = long_plain.chunks_exact(len).map(|x| x.to_vec()).collect();
+
+    assert_eq!(plaintexts.len(), decoded.len());
+    assert!(String::from_utf8_lossy(&decoded[5]).contains("when I come your warned"));
+    assert!(String::from_utf8_lossy(&decoded[34])
+        .contains("wake ya with hundreds of thousands of volts"));
     // doesn't decode all the way correctly but gets the bulk of the job done
 }

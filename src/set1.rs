@@ -106,28 +106,30 @@ fn challange5() {
     assert_eq!(xor_rep(input, key), hex_to_raw(output));
 }
 
-#[test]
-fn challange6() {
-    let bytes = read_base64("data/set1/challange6.txt");
-
+pub fn guess_rep_xor_key_size(block: &[u8]) -> usize {
     let mut key_size = 0;
     let mut min_hamming_distance = f64::MAX;
     // find the block length (key size) that produces the minimal
     // hamming distance for two consecutive blocks
     // * for resilience, I'm using 4x the block length
-    for l in 2..=40 {
+    for l in 2..=60 {
         // test 4 blocks of key_size
-        let hd = hamming_distance(&bytes[..4 * l], &bytes[4 * l..8 * l]);
+        let hd = hamming_distance(&block[..4 * l], &block[4 * l..8 * l]);
         let normalized_hd = f64::from(hd) / f64::from(l as u8);
         if normalized_hd < min_hamming_distance {
             min_hamming_distance = normalized_hd;
             key_size = l;
         }
     }
+    key_size
+}
 
-    let key: Vec<u8> = (0..key_size)
+// Returns the constructed key
+pub fn break_rep_xor(ciphertext: &[u8]) -> Vec<u8> {
+    let key_size = guess_rep_xor_key_size(&ciphertext);
+    (0..key_size)
         .map(|offset| {
-            bytes
+            ciphertext
                 .iter()
                 .skip(offset)
                 .step_by(key_size)
@@ -135,7 +137,13 @@ fn challange6() {
                 .collect::<Vec<u8>>()
         }) // group by xor-ed with same byte of key
         .map(|group| xor_cross_entropy_analysis(&group).0)
-        .collect();
+        .collect()
+}
+
+#[test]
+fn challange6() {
+    let bytes = read_base64("data/set1/challange6.txt");
+    let key = break_rep_xor(&bytes);
 
     // encryption is symmetric
     let raw = xor_rep(&bytes, &key);
