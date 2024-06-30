@@ -45,7 +45,7 @@ lazy_static! {
     };
 }
 
-fn xor_cross_entropy_analysis(encoded: &[u8]) -> (u8, f64) {
+pub fn xor_cross_entropy_analysis(encoded: &[u8]) -> (u8, f64) {
     let mut min_cross_entropy = f64::MAX;
     let mut best_key = 0;
     for key in 0..=255 {

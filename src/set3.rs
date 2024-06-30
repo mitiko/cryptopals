@@ -1,4 +1,10 @@
-use crate::{cbc::*, ctr::aes128_ctr_decrypt, ecb::*, utils::{conversions::base64_to_raw, io::*}};
+use crate::{
+    cbc::*,
+    ctr::{aes128_ctr_decrypt, aes128_ctr_encrypt},
+    ecb::*,
+    set1::xor_cross_entropy_analysis,
+    utils::{conversions::base64_to_raw, io::*},
+};
 use lazy_static::lazy_static;
 use rand::{Rng, SeedableRng};
 
@@ -139,8 +145,35 @@ fn challange17() {
 
 #[test]
 fn challange18() {
-    let ciphertext = base64_to_raw("L77na/nrFsKvynd6HzOoG7GHTLXsTVu9qvY/2syLXzhPweyyMTJULu/6/kXX0KSvoOLSFQ==");
+    let ciphertext =
+        base64_to_raw("L77na/nrFsKvynd6HzOoG7GHTLXsTVu9qvY/2syLXzhPweyyMTJULu/6/kXX0KSvoOLSFQ==");
     let key = b"YELLOW SUBMARINE";
     let plaintext = aes128_ctr_decrypt(&ciphertext, key, 0, 0);
     assert!(String::from_utf8_lossy(&plaintext).contains("Ice, Ice, baby"));
+}
+
+#[test]
+fn challange19() {
+    let plaintexts = read_base64_lines("data/set3/challenge19.txt");
+    let key = rand::rngs::StdRng::from_seed([57; 32]).gen();
+    let ciphertexts: Vec<_> = plaintexts.iter().map(|p| aes128_ctr_encrypt(&p, &key, 0, 0)).collect();
+
+    let mut decoded = vec![Vec::new(); ciphertexts.len()];
+    let len = ciphertexts.iter().map(|c| c.len()).max().unwrap();
+    for idx in 0..len {
+        let cipher_bytes: Vec<u8> = ciphertexts
+            .iter()
+            .filter_map(|c| c.get(idx))
+            .map(|&x| x)
+            .collect();
+        let (key, _) = xor_cross_entropy_analysis(&cipher_bytes);
+        for (i, data) in decoded.iter_mut().enumerate() {
+            if let Some(byte) = ciphertexts[i].get(idx) {
+                data.push(byte ^ key);
+            }
+        }
+    }
+    assert!(String::from_utf8_lossy(&decoded[5]).contains("polite meaningless words"));
+    assert!(String::from_utf8_lossy(&decoded[34]).contains("yet I number him in the song"));
+    // doesn't decode all the way correctly but gets the bulk of the job done
 }
