@@ -5,5 +5,5 @@ edition = "2021"
 
 [dependencies]
 lazy_static = "1.4.0"
-openssl = "0.10.48"
+openssl = "0.10.78"
 rand = "0.8.5"
